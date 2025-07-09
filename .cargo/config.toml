@@ -10,3 +10,6 @@ check_code = "clippy --all-targets --all-features -- -D warnings"
 
 [registries.github]
 index = "https://github.com/mairie360/crate-index"
+
+[net]
+git-fetch-with-cli = true

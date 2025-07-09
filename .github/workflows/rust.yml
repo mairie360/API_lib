@@ -4,9 +4,6 @@ on: [push, pull_request]
 
 jobs:
   call-cicd:
-    uses: mairie360/CICD/.github/workflows/cicd.yml@1-feat-add-front-and-web-ci
+    uses: mairie360/CICD/.github/workflows/cicd.yml@feat/MAIR-5-add-api-lib-cicd
     with:
-      type: back
-      postman_collection: ${{ vars.POSTMAN_CORE_API_COLLECTION_ID }}
-    secrets:
-      POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+      type: back-lib

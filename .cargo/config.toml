@@ -1,10 +1,10 @@
 [alias]
 
-#This alias check the lint
+# This alias checks the lint
 lint_check = "fmt --all -- --check"
 
 # This alias formats the code
 lint_fix = "fmt --all"
 
-# This alias check the code
+# This alias checks the code
 check_code = "clippy --all-targets --all-features -- -D warnings"

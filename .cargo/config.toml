@@ -1,5 +1,4 @@
 [alias]
-
 # This alias checks the lint
 lint_check = "fmt --all -- --check"
 
@@ -8,3 +7,6 @@ lint_fix = "fmt --all"
 
 # This alias checks the code
 check_code = "clippy --all-targets --all-features -- -D warnings"
+
+[registries]
+github = { index = "https://github.com/mairie360/tmp" }

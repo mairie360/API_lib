@@ -9,7 +9,7 @@ lint_fix = "fmt --all"
 check_code = "clippy --all-targets --all-features -- -D warnings"
 
 [registries.github]
-index = "https://github.com/mairie360/crate-index"
+index = "https://github.com/mairie360/crate-index.git"
 
 [net]
 git-fetch-with-cli = true

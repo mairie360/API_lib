@@ -9,4 +9,4 @@ lint_fix = "fmt --all"
 check_code = "clippy --all-targets --all-features -- -D warnings"
 
 [registries]
-github = { index = "https://github.com/mairie360/tmp" }
+github = { index = "https://github.com/mairie360/API_lib" }

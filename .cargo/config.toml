@@ -9,7 +9,7 @@ lint_fix = "fmt --all"
 check_code = "clippy --all-targets --all-features -- -D warnings"
 
 [registries.mairie360]
-index = "https://mairie360-eip.fr/cargo-index"
+index = "https://github.com/mairie360/cargo-index"
 
 [net]
 git-fetch-with-cli = true

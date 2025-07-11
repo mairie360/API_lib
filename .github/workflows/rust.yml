@@ -12,5 +12,6 @@ jobs:
     uses: mairie360/CICD/.github/workflows/cicd.yml@feat/MAIR-5-add-api-lib-cicd
     secrets:
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      MAIRIE_360_DEPLOY_TOKEN: ${{ secrets.MAIRIE_360_DEPLOY_TOKEN }}
     with:
       type: cd-back-lib

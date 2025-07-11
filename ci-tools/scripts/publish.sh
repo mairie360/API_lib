@@ -14,13 +14,15 @@ if [ -z "$MAIRIE_360_DEPLOY_TOKEN" ]; then
     exit 1
 fi
 
+CLEAN_VERSION="${VERSION#v}"
+
 # 🟢 récupère le nom de la crate depuis ton projet
 CRATE_NAME=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].name')
 echo "Crate name: $CRATE_NAME"
 
 cargo package
 
-CRATE_FILE="target/package/${CRATE_NAME}-${VERSION}.crate"
+CRATE_FILE="target/package/${CRATE_NAME}-${CLEAN_VERSION}.crate"
 if [ ! -f "$CRATE_FILE" ]; then
     echo "Error: crate file $CRATE_FILE does not exist"
     exit 1
@@ -49,13 +51,13 @@ CRATE_INDEX_FILE="/tmp/index/$FIRST_CHAR/$CRATE_NAME"
 mkdir -p "$(dirname "$CRATE_INDEX_FILE")"
 
 # Prépare la nouvelle ligne JSON pour cette version
-NEW_LINE=$(jq -nc --arg name "$CRATE_NAME" --arg vers "$VERSION" --argjson deps "$DEPS_JSON" --arg cksum "$CHECKSUM" \
+NEW_LINE=$(jq -nc --arg name "$CRATE_NAME" --arg vers "$CLEAN_VERSION" --argjson deps "$DEPS_JSON" --arg cksum "$CHECKSUM" \
     '{name: $name, vers: $vers, deps: $deps, cksum: $cksum, features: {}, yanked: false, links: null}')
 
 # Si le fichier existe déjà, on filtre les versions différentes pour éviter doublons
 if [ -f "$CRATE_INDEX_FILE" ]; then
     # Supprime la ligne pour cette version si elle existe déjà
-    grep -v "\"vers\":\"$VERSION\"" "$CRATE_INDEX_FILE" > "$CRATE_INDEX_FILE.tmp" || true
+    grep -v "\"vers\":\"$CLEAN_VERSION\"" "$CRATE_INDEX_FILE" > "$CRATE_INDEX_FILE.tmp" || true
     mv "$CRATE_INDEX_FILE.tmp" "$CRATE_INDEX_FILE"
 fi
 
@@ -64,8 +66,8 @@ echo "$NEW_LINE" >> "$CRATE_INDEX_FILE"
 
 cd /tmp/index
 git add "$CRATE_INDEX_FILE"
-git commit -m "Add $CRATE_NAME $VERSION"
+git commit -m "Add $CRATE_NAME $CLEAN_VERSION"
 git push
 
 # echo "📤 Uploading crate"
-# scp "$CRATE_FILE" user@mairie360-eip.fr:/var/www/html/crates/$CRATE_NAME/$VERSION/download
+# scp "$CRATE_FILE" user@mairie360-eip.fr:/var/www/html/crates/$CRATE_NAME/$CLEAN_VERSION/download

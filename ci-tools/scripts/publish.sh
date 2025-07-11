@@ -69,5 +69,6 @@ git add "$CRATE_INDEX_FILE"
 git commit -m "Add $CRATE_NAME $CLEAN_VERSION"
 git push
 
-# echo "📤 Uploading crate"
-# scp "$CRATE_FILE" user@mairie360-eip.fr:/var/www/html/crates/$CRATE_NAME/$CLEAN_VERSION/download
+echo "📤 Uploading crate"
+ssh gixa4666@fille.o2switch.net "mkdir -p /home/gixa4666/public_html/crates/$CRATE_NAME/$CLEAN_VERSION/download"
+scp "$CRATE_FILE" gixa4666@fille.o2switch.net:/home/gixa4666/public_html/crates/$CRATE_NAME/$CLEAN_VERSION/download

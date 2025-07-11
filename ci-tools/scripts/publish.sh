@@ -9,19 +9,14 @@ fi
 
 echo "🚀 Publishing $VERSION to private cargo registry"
 
-# Vérifie que MAIRIE_360_DEPLOY_TOKEN est défini
 if [ -z "$MAIRIE_360_DEPLOY_TOKEN" ]; then
     echo "Error: MAIRIE_360_DEPLOY_TOKEN environment variable is not set"
     exit 1
 fi
 
-# Clone l'index via HTTPS avec token
-git clone https://$MAIRIE_360_DEPLOY_TOKEN@github.com/mairie360/cargo-index.git /tmp/index
-cd /tmp/index
-
+# 🟢 récupère le nom de la crate depuis ton projet
 CRATE_NAME=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].name')
 echo "Crate name: $CRATE_NAME"
-cd -
 
 cargo package
 
@@ -39,6 +34,9 @@ DEPS_JSON=$(cargo metadata --format-version=1 --no-deps | jq --arg CRATE "$CRATE
   registry: null,
   package: null
 })')
+
+# 🔵 clone l'index APRÈS avoir trouvé les infos
+git clone https://$MAIRIE_360_DEPLOY_TOKEN@github.com/mairie360/cargo-index.git /tmp/index
 
 FIRST_CHAR=$(echo -n "$CRATE_NAME" | head -c 1)
 CRATE_INDEX_FILE="/tmp/index/$FIRST_CHAR/$CRATE_NAME"

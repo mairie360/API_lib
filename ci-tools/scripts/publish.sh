@@ -20,6 +20,7 @@ git clone https://$MAIRIE_360_DEPLOY_TOKEN@github.com/mairie360/cargo-index.git 
 cd /tmp/index
 
 CRATE_NAME=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].name')
+echo "Crate name: $CRATE_NAME"
 cd -
 
 cargo package

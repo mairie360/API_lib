@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "api_lib"
+name = "mairie360_api_lib"
 version = "0.1.0"
 dependencies = [
  "once_cell",

@@ -1,11 +1,11 @@
 [package]
-name = "api_lib"
+name = "mairie360_api_lib"
 version = "0.1.0"
-edition = "2024"
-authors = ["quentin.tennerel@epitech.eu"]
-description = "Lib for marie360 APIs"
+authors = ["Quentin TENNEREL <quentin.tennerel@epitech.eu>"]
+edition = "2021"
+description = "Lib for mairie360 APIs"
 license = "MIT"
-publish = ["mairie360"]
+repository = "https://github.com/mairie360/API_lib"
 
 [dependencies]
 once_cell = "1.21.3"

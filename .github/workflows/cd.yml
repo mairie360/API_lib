@@ -11,6 +11,5 @@ jobs:
     if: github.ref == 'refs/heads/main'
     uses: mairie360/CICD/.github/workflows/cd-back-lib.yml@feat/MAIR-5-add-api-lib-cicd
     secrets:
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       MAIRIE_360_DEPLOY_TOKEN: ${{ secrets.MAIRIE_360_DEPLOY_TOKEN }}
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

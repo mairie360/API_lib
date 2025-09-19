@@ -1,4 +1,4 @@
-use api_lib::env_manager::{get_critical_env_var, get_env_var};
+use mairie360_api_lib::env_manager::{get_critical_env_var, get_env_var};
 use once_cell::sync::Lazy;
 use std::env;
 

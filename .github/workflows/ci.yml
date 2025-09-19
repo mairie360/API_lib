@@ -7,6 +7,6 @@ on:
 
 jobs:
   call-cicd:
-    uses: mairie360/CICD/.github/workflows/cicd.yml@feat/MAIR-5-add-api-lib-cicd
-    with:
-      type: ci-back-lib
+    uses: mairie360/CICD/.github/workflows/ci-back-lib.yml@feat/MAIR-5-add-api-lib-cicd
+    # with:
+    #   type: ci-back-lib

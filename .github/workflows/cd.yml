@@ -5,10 +5,10 @@ on:
     branches:
       - main
   workflow_dispatch:
-      - main
 
 jobs:
   call-cicd:
+    if: github.ref == 'refs/heads/main'
     uses: mairie360/CICD/.github/workflows/cd-back-lib.yml@feat/MAIR-5-add-api-lib-cicd
     secrets:
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}

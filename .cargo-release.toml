@@ -1,0 +1,9 @@
+tag = true
+tag-name = "v{{version}}"
+push = true
+push-remote = "origin"
+publish = true
+registry = "crates-io"
+allow-dirty = false
+skip-build = false
+allow-branch = ["main"]

@@ -1,14 +1,16 @@
-name: API-Lib-CD
+name: API-Lib-CI
 
 on:
   push:
-    branches:
-      - main
+  pull_request:
   workflow_dispatch:
 
 jobs:
-  call-cicd:
-    if: github.ref == 'refs/heads/main'
+  ci:
+    uses: mairie360/CICD/.github/workflows/ci-back-lib.yml@feat/MAIR-5-add-api-lib-cicd
+
+  cd:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     uses: mairie360/CICD/.github/workflows/cd-back-lib.yml@feat/MAIR-5-add-api-lib-cicd
     secrets:
       MAIRIE_360_DEPLOY_TOKEN: ${{ secrets.MAIRIE_360_DEPLOY_TOKEN }}

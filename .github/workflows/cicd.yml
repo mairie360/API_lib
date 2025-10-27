@@ -1,5 +1,5 @@
 name: API-Lib-CI/CD
-
+#test
 on:
   push:
   pull_request:
@@ -11,6 +11,7 @@ jobs:
 
   cd:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: ci
     uses: mairie360/CICD/.github/workflows/cd-back-lib.yml@feat/MAIR-5-add-api-lib-cicd
     secrets:
       MAIRIE_360_DEPLOY_TOKEN: ${{ secrets.MAIRIE_360_DEPLOY_TOKEN }}

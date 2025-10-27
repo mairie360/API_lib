@@ -1,0 +1,8 @@
+# Liste des types autorisés
+types = ["fix", "feat", "major"]
+
+# Autoriser les breaking changes via "!"
+breaking_change_indicators = ["!"]
+
+# Si un commit ne respecte pas le format -> erreur 🚫
+error_on_invalid = true

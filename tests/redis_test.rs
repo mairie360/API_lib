@@ -10,8 +10,7 @@ mod unsecured_redis_tests {
         let docker = Cli::default();
 
         // On définit l'image redis manuellement
-        let redis_image = GenericImage::new("redis", "7.2.4")
-            .with_exposed_port(6379);
+        let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
 
         let node = docker.run(redis_image);
         let port = node.get_host_port_ipv4(6379);
@@ -25,7 +24,7 @@ mod unsecured_redis_tests {
         assert!(result.is_ok(), "Expected Ok(()), got {:?}", result);
     }
 
-  #[tokio::test]
+    #[tokio::test]
     async fn test_add_key_failure() {
         let docker = Cli::default();
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
@@ -42,7 +41,10 @@ mod unsecured_redis_tests {
         let res2 = add_key(&mut conn, "unique_key", "value2").await;
         println!("Deuxième ajout: {:?}", res2);
 
-        assert!(res2.is_err(), "The second addition should fail due to duplicate key");
+        assert!(
+            res2.is_err(),
+            "The second addition should fail due to duplicate key"
+        );
     }
 
     //test get key
@@ -95,7 +97,11 @@ mod unsecured_redis_tests {
         assert!(result.is_ok(), "Expected Ok(value), got {:?}", result);
 
         let value = result.unwrap();
-        assert_eq!(value, "test_value", "Expected value to be 'test_value', got {}", value);
+        assert_eq!(
+            value, "test_value",
+            "Expected value to be 'test_value', got {}",
+            value
+        );
     }
 
     #[tokio::test]
@@ -128,7 +134,10 @@ mod unsecured_redis_tests {
         let client = Client::open(format!("redis://127.0.0.1:{}", port)).unwrap();
         let mut conn = client.get_connection().expect("Failed to connect");
 
-        assert!(delete_key(&mut conn, "non_existent_key").await.is_err(), "Expected Err(_) when deleting non-existent key");
+        assert!(
+            delete_key(&mut conn, "non_existent_key").await.is_err(),
+            "Expected Err(_) when deleting non_existent_key"
+        );
     }
 
     #[tokio::test]
@@ -224,7 +233,11 @@ mod secured_redis_tests {
         assert!(result.is_ok(), "Expected Ok(()), got {:?}", result);
 
         let value = result.unwrap();
-        assert_eq!(value, "test_value", "Expected value to be 'test_value', got {:?}", value);
+        assert_eq!(
+            value, "test_value",
+            "Expected value to be 'test_value', got {:?}",
+            value
+        );
     }
 
     #[tokio::test]
@@ -273,13 +286,14 @@ mod secured_redis_tests {
 
 #[cfg(test)]
 mod redis_manager_test {
-    use mairie360_api_lib::redis::redis_manager::{create_redis_manager, get_redis_manager, RedisManager};
+    use mairie360_api_lib::redis::redis_manager::{
+        create_redis_manager, get_redis_manager, RedisManager,
+    };
     use once_cell::sync::Lazy;
     use serial_test::serial;
     use std::env;
     use testcontainers::clients::Cli;
     use testcontainers::GenericImage;
-
 
     #[should_panic]
     #[serial]
@@ -293,9 +307,14 @@ mod redis_manager_test {
         let docker = Cli::default();
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
         docker.run(redis_image);
-        unsafe { env::remove_var("REDIS_URL"); }
+        unsafe {
+            env::remove_var("REDIS_URL");
+        }
 
-        assert!(env::var("REDIS_URL").is_err(), "REDIS_URL should not be set");
+        assert!(
+            env::var("REDIS_URL").is_err(),
+            "REDIS_URL should not be set"
+        );
 
         RedisManager::new();
     }
@@ -303,7 +322,9 @@ mod redis_manager_test {
     #[should_panic]
     #[serial]
     async fn test_create_redis_manager_failure_with_bad_url() {
-        unsafe { env::set_var("REDIS_URL", "redis://127.0.0.1:6378"); }
+        unsafe {
+            env::set_var("REDIS_URL", "redis://127.0.0.1:6378");
+        }
 
         let docker = Cli::default();
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
@@ -314,7 +335,9 @@ mod redis_manager_test {
 
     #[serial]
     async fn test_create_redis_manager_success() {
-        unsafe { env::set_var("REDIS_URL", "redis://127.0.0.1:6379"); }
+        unsafe {
+            env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
+        }
 
         let docker = Cli::default();
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
@@ -326,7 +349,9 @@ mod redis_manager_test {
     #[tokio::test]
     #[serial]
     async fn test_set_redis_manager_singleton() {
-        unsafe { env::set_var("REDIS_URL", "redis://127.0.0.1:6379"); }
+        unsafe {
+            env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
+        }
 
         let docker = Cli::default();
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
@@ -338,7 +363,9 @@ mod redis_manager_test {
     #[tokio::test]
     #[serial]
     async fn test_get_redis_manager_singleton() {
-        unsafe { env::set_var("REDIS_URL", "redis://127.0.0.1:6379"); }
+        unsafe {
+            env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
+        }
 
         let docker = Cli::default();
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);

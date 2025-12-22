@@ -270,3 +270,80 @@ mod secured_redis_tests {
         assert!(result.is_err(), "Expected Err(_), got {:?}", result);
     }
 }
+
+#[cfg(test)]
+mod redis_manager_test {
+    use mairie360_api_lib::redis::redis_manager::{create_redis_manager, get_redis_manager, RedisManager};
+    use once_cell::sync::Lazy;
+    use serial_test::serial;
+    use std::env;
+    use testcontainers::clients::Cli;
+    use testcontainers::GenericImage;
+
+
+    #[should_panic]
+    #[serial]
+    async fn test_create_redis_manager_failure_without_starting_redis() {
+        RedisManager::new();
+    }
+
+    #[should_panic]
+    #[serial]
+    async fn test_create_redis_manager_failure_without_env_var() {
+        let docker = Cli::default();
+        let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
+        docker.run(redis_image);
+        unsafe { env::remove_var("REDIS_URL"); }
+
+        assert!(env::var("REDIS_URL").is_err(), "REDIS_URL should not be set");
+
+        RedisManager::new();
+    }
+
+    #[should_panic]
+    #[serial]
+    async fn test_create_redis_manager_failure_with_bad_url() {
+        unsafe { env::set_var("REDIS_URL", "redis://127.0.0.1:6378"); }
+
+        let docker = Cli::default();
+        let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
+        docker.run(redis_image);
+
+        RedisManager::new();
+    }
+
+    #[serial]
+    async fn test_create_redis_manager_success() {
+        unsafe { env::set_var("REDIS_URL", "redis://127.0.0.1:6379"); }
+
+        let docker = Cli::default();
+        let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
+        docker.run(redis_image);
+
+        RedisManager::new();
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_set_redis_manager_singleton() {
+        unsafe { env::set_var("REDIS_URL", "redis://127.0.0.1:6379"); }
+
+        let docker = Cli::default();
+        let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
+        docker.run(redis_image);
+
+        create_redis_manager().await;
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_get_redis_manager_singleton() {
+        unsafe { env::set_var("REDIS_URL", "redis://127.0.0.1:6379"); }
+
+        let docker = Cli::default();
+        let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
+        docker.run(redis_image);
+
+        get_redis_manager().await;
+    }
+}

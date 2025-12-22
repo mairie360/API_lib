@@ -48,7 +48,7 @@ impl RedisManager {
      * # Panics
      * If the REDIS_URL environment variable is not set or if the Redis client cannot be created.
      */
-    fn new() -> Self {
+    pub fn new() -> Self {
         let redis_url = get_critical_env_var("REDIS_URL");
         println!("Connecting to Redis at: {}", redis_url);
         let client = Client::open(redis_url).expect("Failed to create Redis client");

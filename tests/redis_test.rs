@@ -289,7 +289,6 @@ mod redis_manager_test {
     use mairie360_api_lib::redis::redis_manager::{
         create_redis_manager, get_redis_manager, RedisManager,
     };
-    use once_cell::sync::Lazy;
     use serial_test::serial;
     use std::env;
     use testcontainers::clients::Cli;
@@ -371,6 +370,7 @@ mod redis_manager_test {
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
         docker.run(redis_image);
 
-        get_redis_manager().await;
+        let redis_manager = get_redis_manager().await;
+        assert!(redis_manager.is_some());
     }
 }

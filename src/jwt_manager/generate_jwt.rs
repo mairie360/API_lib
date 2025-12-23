@@ -37,8 +37,7 @@ pub fn generate_jwt(user_id_str: &str) -> Result<String, jsonwebtoken::errors::E
                 &EncodingKey::from_secret(&secret),
             )?;
             Ok(token)
-
-        },
+        }
         Err(e) => Err(e),
     }
 }

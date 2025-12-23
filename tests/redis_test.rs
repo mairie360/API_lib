@@ -325,7 +325,10 @@ mod redis_manager_test {
             let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
             docker.run(redis_image);
 
-            assert!(std::env::var("REDIS_URL").is_ok(), "REDIS_URL should be set");
+            assert!(
+                std::env::var("REDIS_URL").is_ok(),
+                "REDIS_URL should be set"
+            );
             assert_eq!(
                 std::env::var("REDIS_URL").unwrap(),
                 "invalid_url",
@@ -343,7 +346,10 @@ mod redis_manager_test {
             let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
             docker.run(redis_image);
 
-            assert!(std::env::var("REDIS_URL").is_ok(), "REDIS_URL should be set");
+            assert!(
+                std::env::var("REDIS_URL").is_ok(),
+                "REDIS_URL should be set"
+            );
             assert_eq!(
                 std::env::var("REDIS_URL").unwrap(),
                 "redis://127.0.0.1:6379",
@@ -361,7 +367,10 @@ mod redis_manager_test {
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
         docker.run(redis_image);
 
-        assert!(std::env::var("REDIS_URL").is_ok(), "REDIS_URL should be set");
+        assert!(
+            std::env::var("REDIS_URL").is_ok(),
+            "REDIS_URL should be set"
+        );
         assert_eq!(
             std::env::var("REDIS_URL").unwrap(),
             "redis://127.0.0.1:6379",
@@ -379,7 +388,10 @@ mod redis_manager_test {
         let redis_image = GenericImage::new("redis", "7.2.4").with_exposed_port(6379);
         docker.run(redis_image);
 
-        assert!(std::env::var("REDIS_URL").is_ok(), "REDIS_URL should be set");
+        assert!(
+            std::env::var("REDIS_URL").is_ok(),
+            "REDIS_URL should be set"
+        );
         assert_eq!(
             std::env::var("REDIS_URL").unwrap(),
             "redis://127.0.0.1:6379",

@@ -1,2 +1,2 @@
 pub mod postgre_interface;
-mod queries;
+pub mod queries;

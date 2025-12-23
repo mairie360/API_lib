@@ -1,6 +1,6 @@
-use crate::database::db_interface::get_db_interface;
-use crate::database::queries_result_views::get_boolean_from_query_result;
-use crate::database::query_views::DoesUserExistByIdQueryView;
+use crate::database::db_interface::{get_db_interface, QueryResultView};
+use crate::database::postgresql::queries::DoesUserExistByIdQuery;
+use crate::database::queries_result_views::{DoesUserExistByIdQueryResultView, get_boolean_from_query_result};
 
 /**
  * Checks if a user exists in the database by their ID.
@@ -12,7 +12,6 @@ use crate::database::query_views::DoesUserExistByIdQueryView;
  * `true` if the user exists, `false` otherwise.
  */
 pub async fn does_user_exist_by_id(user_id: u64) -> bool {
-    let view = DoesUserExistByIdQueryView::new(user_id);
     let db_guard = get_db_interface().lock().unwrap();
     let db_interface = match &*db_guard {
         Some(db) => db,
@@ -20,7 +19,7 @@ pub async fn does_user_exist_by_id(user_id: u64) -> bool {
             return false;
         }
     };
-    let query_view = db_interface.execute_query(Box::new(view)).await;
+    let query_view: Result<DoesUserExistByIdQueryResultView, String> = db_interface.execute_query(DoesUserExistByIdQuery::new(user_id)).await;
 
     let result = match query_view {
         Ok(result) => result,

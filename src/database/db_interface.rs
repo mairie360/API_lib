@@ -1,34 +1,22 @@
 use super::postgresql::postgre_interface::{create_postgre_interface, get_postgre_interface};
 use crate::database::queries_result_views::QueryResult;
 use crate::database::QUERY;
-use std::collections::HashMap;
-use std::env;
+use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{LazyLock, Mutex};
+use tokio_postgres::Client;
 
 /**
  * Database Interface Module
  */
-static DB_INTERACE: LazyLock<Mutex<Option<DbInterface>>> =
-    LazyLock::new(|| Mutex::new(Some(DbInterface::new())));
+static DB_INTERFACE: LazyLock<Mutex<Option<DbInterface>>> =
+    LazyLock::new(|| Mutex::new(None));
 
-/**
- * Database Type Enum
- * This enum represents the different types of databases supported by the application.
- */
-static DB_TYPES: LazyLock<HashMap<String, DatabaseType>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
-    map.insert(String::from("postgres"), DatabaseType::PostgreSQL);
-    map
-});
-
-/**
- * Function to get the database type based on the key.
- * If the key is not found, it returns DatabaseType::Unknown.
- */
-fn get_db_type(key: &str) -> DatabaseType {
-    DB_TYPES.get(key).cloned().unwrap_or(DatabaseType::Unknown)
+pub async fn init_db_interface() {
+    let db_interface = DbInterface::new().await;
+    let mut guard = DB_INTERFACE.lock().unwrap();
+    *guard = Some(db_interface);
 }
 
 /**
@@ -36,7 +24,7 @@ fn get_db_type(key: &str) -> DatabaseType {
  * This function returns a static reference to a Mutex-wrapped Option of DbInterface.
  */
 pub fn get_db_interface() -> &'static Mutex<Option<DbInterface>> {
-    &DB_INTERACE
+    &DB_INTERFACE
 }
 
 /**
@@ -82,6 +70,14 @@ pub trait DatabaseQueryView: Send {
     fn get_query_type(&self) -> QUERY;
 }
 
+#[async_trait]
+pub trait Query {
+    type Output: QueryResultView;
+
+    async fn execute(&self, client: &Client) -> Result<Self::Output, String>;
+}
+
+#[async_trait]
 pub trait DatabaseInterfaceActions: Send {
     /**
      * Connects to the database.
@@ -100,10 +96,12 @@ pub trait DatabaseInterfaceActions: Send {
      * This method should be implemented by any struct that implements this trait.
      * It is expected to return a Future that resolves to a Result containing a QueryResultView or an error message.
      */
-    fn execute_query(
+    async fn execute_query<Q>(
         &self,
-        query: Box<dyn DatabaseQueryView>,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn QueryResultView>, String>> + Send>>;
+        query: Q,
+    ) -> Result<Q::Output, String>
+    where
+        Q: Query + Send + 'static;
 }
 
 /**
@@ -121,19 +119,8 @@ impl DbInterface {
      * This method initializes the database interface based on the environment variable DB_TYPE.
      * If the DB_TYPE is not supported, it will print an error message and exit the program.
      */
-    pub fn new() -> Self {
-        println!("Initializing database interface...");
-        let db_type = env::var("DB_TYPE");
-        println!("Database type: {:?}", db_type);
-        match get_db_type(db_type.clone().unwrap().as_str()) {
-            DatabaseType::PostgreSQL => {
-                create_postgre_interface();
-            }
-            _ => {
-                eprintln!("Unsupported database type: {}", db_type.unwrap().as_str());
-                std::process::exit(1);
-            }
-        }
+    pub async fn new() -> Self {
+        create_postgre_interface().await;
         DbInterface {}
     }
 
@@ -172,16 +159,16 @@ impl DbInterface {
      * This method takes a query as a parameter, executes it, and returns the result.
      * It returns a Result containing a QueryResultView or an error message.
      */
-    pub async fn execute_query(
+    pub async fn execute_query<Q>(
         &self,
-        query: Box<dyn DatabaseQueryView>,
-    ) -> Result<Box<dyn QueryResultView>, String> {
+        query: Q,
+    ) -> Result<Q::Output, String>
+    where
+        Q: Query + Send + 'static,
+    {
         let guard = get_postgre_interface().await;
         if let Some(ref postgre_interface) = *guard {
-            match postgre_interface.execute_query(query).await {
-                Ok(result) => Ok(result),
-                Err(e) => Err(e),
-            }
+            postgre_interface.execute_query(query).await
         } else {
             Err("PostgreInterface not initialized".to_string())
         }

@@ -1,8 +1,7 @@
 use crate::env_manager::get_critical_env_var;
-use super::queries::*;
-use crate::database::db_interface::{DatabaseInterfaceActions, DatabaseQueryView, QueryResultView};
-use crate::database::queries::QUERY::*;
+use crate::database::db_interface::{DatabaseInterfaceActions, Query};
 
+use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
@@ -79,6 +78,8 @@ impl PostgreInterface {
     }
 }
 
+
+#[async_trait]
 impl DatabaseInterfaceActions for PostgreInterface {
     fn connect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send>> {
         let client_ref = self.client.clone();
@@ -109,23 +110,15 @@ impl DatabaseInterfaceActions for PostgreInterface {
         Box::pin(async move { Ok(String::from("PostgreSql Disconnected")) })
     }
 
-    fn execute_query(
-        &self,
-        query: Box<dyn DatabaseQueryView>,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn QueryResultView>, String>> + Send>> {
+    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, String>
+    where
+        Q: Query + Send + 'static,
+    {
         let client = self.get_client();
-        Box::pin(async move {
-            match query.get_query_type() {
-                AboutUser => about_user(query, client).await,
-                DoesUserExistByEmail => does_user_exist_by_email(query, client).await,
-                DoesUserExistById => does_user_exist_by_id(query, client).await,
-                RegisterUser => register_user(query, client).await,
-                LoginUser => login_user(query, client).await,
-                UnknownQuery => Err(format!(
-                    "Unsupported query type: {}",
-                    query.get_query_type()
-                )),
-            }
-        })
+        let locked_client = client.lock().await;
+        match &*locked_client {
+            Some(ref client) => query.execute(client).await,
+            None => Err("Database client is not connected".to_string()),
+        }
     }
 }

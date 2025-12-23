@@ -20,7 +20,7 @@ pub enum JWTCheckError {
     NoTokenProvided,
     ExpiredToken,
     InvalidToken,
-    UnknowUser,
+    UnknownUser,
 }
 
 /**
@@ -46,7 +46,15 @@ pub async fn check_jwt_validity(jwt: &str) -> Result<(), JWTCheckError> {
         }
     };
 
-    match does_user_exist_by_id(user_id.parse().unwrap()).await {
+    let parsed_user_id: usize = match user_id.parse() {
+        Ok(id) => id,
+        Err(_) => {
+            eprintln!("Failed to parse user ID from JWT.");
+            return Err(JWTCheckError::InvalidToken);
+        }
+    };
+
+    match does_user_exist_by_id(parsed_user_id).await {
         true => {
             let timeout: usize = match get_timeout_from_jwt(&jwt) {
             Some(t) => t,
@@ -56,7 +64,7 @@ pub async fn check_jwt_validity(jwt: &str) -> Result<(), JWTCheckError> {
             }
             };
 
-            return match verify_jwt_timeout(timeout) {
+            match verify_jwt_timeout(timeout) {
                 Ok(true) => {
                     Ok(())
                 }
@@ -72,7 +80,7 @@ pub async fn check_jwt_validity(jwt: &str) -> Result<(), JWTCheckError> {
         }
         false => {
             eprintln!("User does not exist with ID: {}", user_id);
-            return Err(JWTCheckError::UnknowUser);
+            return Err(JWTCheckError::UnknownUser);
         }
     }
 }

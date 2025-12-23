@@ -10,7 +10,7 @@ use std::env;
  * It tests the functionality of generating JWTs, retrieving user IDs from JWTs,
  * and getting the JWT secret and timeout.
  */
-static USER_ID: &str = "2";
+static USER_ID: &str = "1";
 
 /**
  * Global setup for tests.

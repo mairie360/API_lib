@@ -23,21 +23,22 @@ pub fn generate_jwt(user_id_str: &str) -> Result<String, jsonwebtoken::errors::E
     let timeout = get_jwt_timeout().map_err(|_e| {
         jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken)
     });
-    if timeout.is_err() {
-        panic!("JWT_TIMEOUT environment variable not set or invalid");
+    match timeout {
+        Ok(t) => {
+            let expiration = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as usize
+                + t; // Token valid for 1 hour
+            let claims = Claims::new(user_id_str.to_owned(), expiration);
+            let token = encode(
+                &Header::default(),
+                &claims,
+                &EncodingKey::from_secret(&secret),
+            )?;
+            Ok(token)
+
+        },
+        Err(e) => Err(e),
     }
-    let expiration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as usize
-        + timeout.unwrap(); // Token valid for 1 hour
-
-    let claims = Claims::new(user_id_str.to_owned(), expiration);
-
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(&secret),
-    )?;
-    Ok(token)
 }

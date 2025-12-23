@@ -3,7 +3,7 @@ use super::jwt_claims::Claims;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 
 /**
- * This function decode a Json Web Tocken
+ * This function decode a Json Web Token
  * It takes a JWT token as input and returns the decoded claims.
  * If the decoding fails, it returns an error.
  * # Arguments

@@ -1,6 +1,5 @@
-use crate::env_manager::get_critical_env_var;
 use crate::database::db_interface::{DatabaseInterfaceActions, Query};
-
+use crate::env_manager::get_critical_env_var;
 use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
@@ -77,7 +76,6 @@ impl PostgreInterface {
         self.client.clone()
     }
 }
-
 
 #[async_trait]
 impl DatabaseInterfaceActions for PostgreInterface {

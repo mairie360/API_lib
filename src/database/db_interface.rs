@@ -10,8 +10,7 @@ use tokio_postgres::Client;
 /**
  * Database Interface Module
  */
-static DB_INTERFACE: LazyLock<Mutex<Option<DbInterface>>> =
-    LazyLock::new(|| Mutex::new(None));
+static DB_INTERFACE: LazyLock<Mutex<Option<DbInterface>>> = LazyLock::new(|| Mutex::new(None));
 
 pub async fn init_db_interface() {
     let db_interface = DbInterface::new().await;
@@ -96,10 +95,7 @@ pub trait DatabaseInterfaceActions: Send {
      * This method should be implemented by any struct that implements this trait.
      * It is expected to return a Future that resolves to a Result containing a QueryResultView or an error message.
      */
-    async fn execute_query<Q>(
-        &self,
-        query: Q,
-    ) -> Result<Q::Output, String>
+    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, String>
     where
         Q: Query + Send + 'static;
 }
@@ -159,10 +155,7 @@ impl DbInterface {
      * This method takes a query as a parameter, executes it, and returns the result.
      * It returns a Result containing a QueryResultView or an error message.
      */
-    pub async fn execute_query<Q>(
-        &self,
-        query: Q,
-    ) -> Result<Q::Output, String>
+    pub async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, String>
     where
         Q: Query + Send + 'static,
     {

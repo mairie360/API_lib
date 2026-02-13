@@ -6,6 +6,6 @@ on:
 
 jobs:
   CICD:
-    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@feat/MAIR-5-add-api-lib-cicd
+    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@main
     secrets:
       CARGO_REGISTRY_TOKEN: ${{ secrets.inherit }}

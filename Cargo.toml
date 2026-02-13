@@ -1,6 +1,6 @@
 [package]
 name = "mairie360_api_lib"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Quentin TENNEREL <quentin.tennerel@epitech.eu>"]
 edition = "2021"
 description = "Lib for mairie360 APIs"

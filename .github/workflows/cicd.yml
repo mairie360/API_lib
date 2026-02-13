@@ -3,7 +3,6 @@ name: API-Lib-CI/CD
 on:
   push:
   workflow_dispatch:
-    main
 
 jobs:
   CICD:

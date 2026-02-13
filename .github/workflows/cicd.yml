@@ -2,18 +2,9 @@ name: API-Lib-CI/CD
 
 on:
   push:
-  pull_request:
   workflow_dispatch:
 
 jobs:
-  # Continuous Integration workflow for API Library
-  ci:
-    uses: mairie360/CICD/.github/workflows/ci-back-lib.yml@feat/MAIR-5-add-api-lib-cicd
-
-  # Continuous Deployment workflow for API Library
-  cd:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: ci
-    uses: mairie360/CICD/.github/workflows/cd-back-lib.yml@feat/MAIR-5-add-api-lib-cicd
-    secrets:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+  CICD:
+    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@main
+    secrets: inherit

@@ -23,9 +23,9 @@ pub async fn secure_add_key(
     match key_exist(conn, key).await {
         Ok(false) => add_key(conn, key, value).await,
         Ok(true) => Err(redis::RedisError::from((
-            redis::ErrorKind::ResponseError,
-            "Key already exist",
-            format!("Key '{}' already exist", key),
+            redis::ErrorKind::Io,
+            "Key already exists",
+            format!("Key '{}' already exists", key),
         ))),
         Err(err) => Err(err),
     }

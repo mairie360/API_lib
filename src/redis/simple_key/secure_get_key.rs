@@ -21,7 +21,7 @@ pub async fn secure_get_key(conn: &mut Connection, key: &str) -> Result<String, 
     match key_exist(conn, key).await {
         Ok(true) => get_key(conn, key).await,
         Ok(false) => Err(redis::RedisError::from((
-            redis::ErrorKind::TypeError,
+            redis::ErrorKind::Io,
             "Key does not exist",
             format!("Key '{}' does not exist", key),
         ))),

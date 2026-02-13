@@ -75,7 +75,7 @@ impl RedisManager {
         match self.connection {
             Some(_) => Ok("Connected to Redis successfully".to_string()),
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "Failed to connect to Redis",
             ))),
         }
@@ -98,14 +98,14 @@ impl RedisManager {
         match &mut self.connection {
             Some(conn) => simple_key::set_key(conn, key, value).await,
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "No Redis connection established",
             ))),
         }
     }
 
     /**
-     * secure_set_key sets a key-value pair in Redis with secure handling.
+     * add_key sets a key-value pair in Redis.
      * It uses the `simple_key` module to perform the operation.
      *
      * # Arguments
@@ -121,7 +121,7 @@ impl RedisManager {
         match &mut self.connection {
             Some(conn) => simple_key::add_key(conn, key, value).await,
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "No Redis connection established",
             ))),
         }
@@ -148,7 +148,7 @@ impl RedisManager {
         match &mut self.connection {
             Some(conn) => simple_key::secure_add_key(conn, key, value).await,
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "No Redis connection established",
             ))),
         }
@@ -171,7 +171,7 @@ impl RedisManager {
         match &mut self.connection {
             Some(conn) => simple_key::get_key(conn, key).await,
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "No Redis connection established",
             ))),
         }
@@ -194,7 +194,7 @@ impl RedisManager {
         match &mut self.connection {
             Some(conn) => simple_key::secure_get_key(conn, key).await,
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "No Redis connection established",
             ))),
         }
@@ -216,7 +216,7 @@ impl RedisManager {
         match &mut self.connection {
             Some(conn) => simple_key::delete_key(conn, key).await,
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "No Redis connection established",
             ))),
         }
@@ -238,7 +238,7 @@ impl RedisManager {
         match &mut self.connection {
             Some(conn) => simple_key::secure_delete_key(conn, key).await,
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "No Redis connection established",
             ))),
         }
@@ -261,7 +261,7 @@ impl RedisManager {
         match &mut self.connection {
             Some(conn) => simple_key::key_exist(conn, key).await,
             None => Err(redis::RedisError::from((
-                redis::ErrorKind::IoError,
+                redis::ErrorKind::Io,
                 "No Redis connection established",
             ))),
         }

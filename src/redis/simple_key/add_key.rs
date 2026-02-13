@@ -22,7 +22,7 @@ pub async fn add_key(
     match conn.set_nx::<&str, &str, bool>(key, value) {
         Ok(true) => Ok(()),
         Ok(false) => Err(redis::RedisError::from((
-            redis::ErrorKind::BusyLoadingError,
+            redis::ErrorKind::Io,
             "Key already exists",
         ))),
         Err(err) => Err(err),

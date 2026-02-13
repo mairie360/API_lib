@@ -23,7 +23,7 @@ pub async fn set_key(
                 Ok(())
             } else {
                 Err(redis::RedisError::from((
-                    redis::ErrorKind::ResponseError,
+                    redis::ErrorKind::Io,
                     "Unexpected SET response",
                 )))
             }

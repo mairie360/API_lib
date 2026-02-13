@@ -19,7 +19,7 @@ pub async fn secure_delete_key(conn: &mut Connection, key: &str) -> Result<(), r
     match key_exist(conn, key).await {
         Ok(true) => delete_key(conn, key).await,
         Ok(false) => Err(redis::RedisError::from((
-            redis::ErrorKind::ResponseError,
+            redis::ErrorKind::Io,
             "Key does not exist",
             format!("Key '{}' does not exist", key),
         ))),

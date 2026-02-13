@@ -21,7 +21,7 @@ pub fn generate_jwt(user_id_str: &str) -> Result<String, jsonwebtoken::errors::E
         jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidKeyFormat)
     })?;
     let timeout = get_jwt_timeout().map_err(|_e| {
-        jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken)
+        jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidKeyFormat)
     });
     match timeout {
         Ok(t) => {
@@ -29,7 +29,7 @@ pub fn generate_jwt(user_id_str: &str) -> Result<String, jsonwebtoken::errors::E
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs() as usize
-                + t; // Token valid for 1 hour
+                + t; // Token valid for the configured JWT timeout duration
             let claims = Claims::new(user_id_str.to_owned(), expiration);
             let token = encode(
                 &Header::default(),

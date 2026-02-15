@@ -1,6 +1,6 @@
 [package]
 name = "mairie360_api_lib"
-version = "0.1.0"
+version = "0.3.0"
 authors = ["Quentin TENNEREL <quentin.tennerel@epitech.eu>"]
 edition = "2021"
 description = "Lib for mairie360 APIs"
@@ -8,14 +8,22 @@ license = "MIT"
 repository = "https://github.com/mairie360/API_lib"
 
 [dependencies]
+actix-web = "4"
+jsonwebtoken = { version = "10.3.0", default-features = false, features = ["rust_crypto"] }
 async-trait = "0.1.89"
 once_cell = "1.21.3"
+redis = "1.0.3"
+tokio = { version = "1.49.0", features = ["full"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tokio = { version = "1.46.0", features = ["full"] }
 tokio-postgres = { version = "0.7", features = ["with-uuid-1"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
-testcontainers = "0.26.2"
+serial_test = "3.3.1"
+temp-env = "0.3.6"
+testcontainers = "0.27.0"
+tokio = { version = "1.49.0", features = ["full"] }
+
+
 postgres = "0.19"

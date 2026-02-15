@@ -1,8 +1,17 @@
-# Liste des types autorisés
-types = ["fix", "feat", "major"]
+[version]
+major_version_zero = false
 
-# Autoriser les breaking changes via "!"
+[[commit_types]]
+type = "feat"
+bump = "minor"
+
+[[commit_types]]
+type = "fix"
+bump = "patch"
+
+[[commit_types]]
+type = "major"
+bump = "major"
+
+[parser]
 breaking_change_indicators = ["!"]
-
-# Si un commit ne respecte pas le format -> erreur 🚫
-error_on_invalid = true

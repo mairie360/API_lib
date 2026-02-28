@@ -108,6 +108,29 @@ async fn test_login_user_wrong_password() {
 
 #[tokio::test]
 #[serial]
+async fn test_login_user_unknown_email() {
+    // 1. Setup : Initialise la base avec Alice (ID 1) uniquement
+    let _container = common::setup_test_db().await;
+
+    // 2. Action : Tentative de login avec un email inexistant
+    let query = LoginUserQuery::new("stranger@danger.com", "any_password");
+
+    let result = {
+        let guard = get_db_interface().lock().unwrap();
+        let db = guard.as_ref().unwrap();
+        db.execute_query(query).await
+    };
+
+    // 3. Assertions
+    // La requête doit réussir (pas d'erreur de communication)
+    assert!(result.is_ok());
+
+    // Mais le résultat doit être l'ID 0 (Utilisateur non trouvé)
+    assert_eq!(result.unwrap().get_result(), QueryResult::U64(0));
+}
+
+#[tokio::test]
+#[serial]
 async fn test_about_user_success() {
     let _container = common::setup_test_db().await;
     let query = AboutUserQuery::new(1);

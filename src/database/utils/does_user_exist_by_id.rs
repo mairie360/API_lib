@@ -1,7 +1,7 @@
 use crate::database::db_interface::{get_db_interface, QueryResultView};
 use crate::database::postgresql::queries::DoesUserExistByIdQuery;
 use crate::database::queries_result_views::{
-    get_boolean_from_query_result, DoesUserExistByIdQueryResultView,
+    utils::get_boolean_from_query_result, DoesUserExistByIdQueryResultView,
 };
 
 /**

@@ -1,5 +1,5 @@
 use super::postgresql::postgre_interface::{create_postgre_interface, get_postgre_interface};
-use crate::database::queries_result_views::QueryResult;
+use crate::database::queries_result_views::utils::QueryResult;
 use crate::database::QUERY;
 use async_trait::async_trait;
 use std::future::Future;

@@ -34,6 +34,14 @@ pub async fn get_postgre_interface() -> tokio::sync::MutexGuard<'static, Option<
 }
 
 /**
+ * For tests only: Resets the singleton to allow re-reading environment variables.
+ */
+pub async fn reset_postgre_interface() {
+    let mut guard = POSTGRESQL_INTERFACE.lock().await;
+    *guard = Some(PostgreInterface::new());
+}
+
+/**
  * The PostgreInterface struct represents the interface for interacting with a PostgreSQL database.
  * It contains the database connection details and a client for executing queries.
  * The struct implements the DatabaseInterfaceActions trait, which defines methods for connecting to the database,
@@ -44,6 +52,7 @@ pub struct PostgreInterface {
     db_user: String,
     db_password: String,
     db_host: String,
+    db_port: String,
     client: Arc<Mutex<Option<Client>>>,
 }
 
@@ -61,6 +70,7 @@ impl PostgreInterface {
             db_user: get_critical_env_var("DB_USER"),
             db_password: get_critical_env_var("DB_PASSWORD"),
             db_host: get_critical_env_var("DB_HOST"),
+            db_port: get_critical_env_var("DB_PORT"),
             client: Arc::new(Mutex::new(None)),
         }
     }
@@ -82,8 +92,8 @@ impl DatabaseInterfaceActions for PostgreInterface {
     fn connect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send>> {
         let client_ref = self.client.clone();
         let config = format!(
-            "host={} user={} password={} dbname={}",
-            self.db_host, self.db_user, self.db_password, self.db_name
+            "host={} port={} user={} password={} dbname={}",
+            self.db_host, self.db_port, self.db_user, self.db_password, self.db_name
         );
 
         Box::pin(async move {

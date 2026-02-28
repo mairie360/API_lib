@@ -1,4 +1,4 @@
-use super::QueryResult;
+use super::utils::QueryResult;
 use crate::database::db_interface::QueryResultView;
 use serde::{Deserialize, Serialize};
 use serde_json;

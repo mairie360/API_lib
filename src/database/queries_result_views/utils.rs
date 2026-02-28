@@ -5,6 +5,7 @@ use std::fmt;
  * This module provides utility functions to handle query results in a database context.
  * It defines a `QueryResult` enum to encapsulate different types of results,
  */
+#[derive(Debug, PartialEq)]
 pub enum QueryResult {
     Boolean(bool),
     JSON(serde_json::Value),

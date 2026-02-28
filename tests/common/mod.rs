@@ -12,6 +12,8 @@ use std::time::Duration;
  * Setup a test database container and initialize the library interface.
  * Returns the ContainerAsync object to keep it alive during the test.
  */
+// ... (tes imports restent identiques)
+
 pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
     // 1. Start Container
     let node = GenericImage::new("postgres", "15-alpine")
@@ -40,7 +42,6 @@ pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
     // 4. Robust Connect with retry
     let mut connected = false;
     for _ in 0..10 {
-        // Scope pour le lock afin d'éviter de le garder pendant le sleep
         let conn_attempt = {
             let mut guard = get_db_interface().lock().unwrap();
             if let Some(db) = guard.as_mut() {
@@ -58,7 +59,7 @@ pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
     }
     assert!(connected, "Manual connection to test DB failed");
 
-    // 5. Schema Setup
+    // 5. Schema Setup (MISE À JOUR ICI)
     {
         let p_guard = get_postgre_interface().await;
         let postgre = p_guard.as_ref().unwrap();
@@ -67,10 +68,33 @@ pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
         let client = locked_client.as_ref().expect("Client tokio-postgres non connecté");
 
         client.batch_execute("
-            CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT);
-            INSERT INTO users (id, username) VALUES (1, 'Alice');
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                first_name TEXT,
+                last_name TEXT,
+                username TEXT,
+                email TEXT UNIQUE,
+                password TEXT,
+                phone_number TEXT,
+                status TEXT -- Ajout de la colonne manquante
+            );
+
+            -- On nettoie pour l'idempotence des tests
+            TRUNCATE TABLE users RESTART IDENTITY;
+
+            -- On insère Alice avec TOUTES les infos attendues par le JSON de test
+            INSERT INTO users (username, email, first_name, last_name, password, phone_number, status)
+            VALUES (
+                'Alice',
+                'alice@example.com',
+                'Alice',
+                'Smith',
+                'password123',
+                '0102030405',
+                'active'
+            );
         ").await.expect("Failed to setup test schema");
     }
 
-    node // On retourne l'objet node pour qu'il ne soit pas dropé (détruit)
+    node
 }

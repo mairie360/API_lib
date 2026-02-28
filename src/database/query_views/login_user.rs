@@ -2,12 +2,6 @@ use crate::database::db_interface::DatabaseQueryView;
 use crate::database::QUERY;
 use std::fmt::Display;
 
-/**
- * LoginUserQueryView
- * This struct is used to represent a query for logging in a user.
- * It contains the user's email and password, and implements the DatabaseQueryView trait.
- * It is used to generate the SQL query for logging in a user.
- */
 pub struct LoginUserQueryView {
     email: String,
     password: String,
@@ -15,18 +9,6 @@ pub struct LoginUserQueryView {
 }
 
 impl LoginUserQueryView {
-    /**
-     * Creates a new LoginUserQueryView instance.
-     *
-     * # Arguments
-     *
-     * * `email` - The email of the user.
-     * * `password` - The password of the user.
-     *
-     * # Returns
-     *
-     * A new instance of LoginUserQueryView.
-     */
     pub fn new(email: String, password: String) -> Self {
         Self {
             email,
@@ -35,20 +17,10 @@ impl LoginUserQueryView {
         }
     }
 
-    /**
-     * Returns the email of the user.
-     * # Returns
-     * A reference to the email string.
-     */
     pub fn get_email(&self) -> &String {
         &self.email
     }
 
-    /**
-     * Returns the password of the user.
-     * # Returns
-     * A reference to the password string.
-     */
     pub fn get_password(&self) -> &String {
         &self.password
     }
@@ -71,8 +43,8 @@ impl Display for LoginUserQueryView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "LoginUserQueryView: email = {}, password = {}",
-            self.email, self.password
+            "LoginUserQueryView: email = {}, password = [PROTECTED]",
+            self.email
         )
     }
 }

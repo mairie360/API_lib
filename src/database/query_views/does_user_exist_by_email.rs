@@ -2,24 +2,12 @@ use crate::database::db_interface::DatabaseQueryView;
 use crate::database::QUERY;
 use std::fmt::Display;
 
-/**
- * This module defines a query view for checking if a user exists by their email.
- * It implements the DatabaseQueryView trait, which requires a method to get the SQL request
- * and a method to get the type of query.
- */
 pub struct DoesUserExistByEmailQueryView {
     email: String,
     query: QUERY,
 }
 
 impl DoesUserExistByEmailQueryView {
-    /**
-     * Creates a new instance of DoesUserExistByEmailQueryView.
-     * # Arguments
-     * * `email` - The email address to check for existence in the database.
-     * # Returns
-     * A new instance of DoesUserExistByEmailQueryView.
-     */
     pub fn new(email: String) -> Self {
         Self {
             email,
@@ -27,11 +15,6 @@ impl DoesUserExistByEmailQueryView {
         }
     }
 
-    /**
-     * Returns the email address associated with this query view.
-     * # Returns
-     * A reference to the email string.
-     */
     pub fn get_email(&self) -> &String {
         &self.email
     }

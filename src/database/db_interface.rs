@@ -54,6 +54,7 @@ pub trait DatabaseQueryView: Send {
      * It is expected to return a string representation of the query request.
      */
     fn get_request(&self) -> String;
+    fn get_raw_request(&self) -> String;
     /**
      * Returns the type of query.
      * This method should be implemented by any struct that implements this trait.

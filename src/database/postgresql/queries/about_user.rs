@@ -23,17 +23,24 @@ impl Query for AboutUserQuery {
     type Error = QueryError;
 
     async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error> {
+        // 1. On force le type i64 (BIGINT Postgres)
+        let id = *self.view.get_id() as i32;
+
+        // 2. On passe l'ID en spécifiant bien la référence ToSql
         let result = client
-            .query_one(self.view.get_request().as_str(), &[])
+            .query_one(
+                self.view.get_request().as_str(),
+                &[&id as &(dyn tokio_postgres::types::ToSql + Sync)]
+            )
             .await;
 
         match result {
             Ok(row) => {
-                let first_name = row.try_get("first_name").map_err(|e| QueryError::MappingError(e.to_string()))?;
-                let last_name = row.try_get("last_name").map_err(|e| QueryError::MappingError(e.to_string()))?;
-                let email = row.try_get("email").map_err(|e| QueryError::MappingError(e.to_string()))?;
-                let phone = row.try_get("phone_number").map_err(|e| QueryError::MappingError(e.to_string()))?;
-                let status = row.try_get("status").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let first_name: &str = row.try_get("first_name").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let last_name: &str = row.try_get("last_name").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let email: &str = row.try_get("email").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let phone: &str = row.try_get("phone_number").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let status: &str = row.try_get("status").map_err(|e| QueryError::MappingError(e.to_string()))?;
 
                 Ok(AboutUserQueryResultView::new(first_name, last_name, email, phone, status))
             }

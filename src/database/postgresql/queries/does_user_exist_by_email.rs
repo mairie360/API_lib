@@ -27,8 +27,9 @@ impl Query for DoesUserExistByEmailQuery {
             return Err(QueryError::InvalidEmailFormat(self.view.get_email().clone()));
         }
 
+        let email = self.view.get_email();
         let result = client
-            .query_one(self.view.get_request().as_str(), &[])
+            .query_one(self.view.get_request().as_str(), &[&email])
             .await;
 
         match result {

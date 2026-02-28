@@ -23,8 +23,14 @@ impl Query for DoesUserExistByIdQuery {
     type Error = QueryError;
 
     async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error> {
+        // CONVERSION CRUCIALE : i64 est le type standard pour BIGINT/BIGSERIAL
+        let user_id = *self.view.get_id() as i32;
+
         let result = client
-            .query_one(self.view.get_request().as_str(), &[])
+            .query_one(
+                self.view.get_request().as_str(),
+                &[&user_id] // Maintenant le driver sait comment sérialiser i64
+            )
             .await;
 
         match result {
@@ -33,7 +39,15 @@ impl Query for DoesUserExistByIdQuery {
                     .map_err(|e| QueryError::MappingError(e.to_string()))?;
                 Ok(DoesUserExistByIdQueryResultView::new(exists))
             }
-            Err(_) => Err(QueryError::InvalidId(self.view.get_id().to_string())),
+            // En cas d'erreur de requête (ex: ID inexistant si tu n'utilises pas EXISTS)
+            Err(e) => {
+                // Pour débugger, on peut regarder si c'est une erreur de ligne
+                if e.to_string().contains("0 rows") {
+                    Err(QueryError::InvalidId(user_id.to_string()))
+                } else {
+                    Err(QueryError::from(e))
+                }
+            },
         }
     }
 }

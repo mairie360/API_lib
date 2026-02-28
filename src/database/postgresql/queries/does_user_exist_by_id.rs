@@ -29,13 +29,14 @@ impl Query for DoesUserExistByIdQuery {
         let result = client
             .query_one(
                 self.view.get_request().as_str(),
-                &[&user_id] // Maintenant le driver sait comment sérialiser i64
+                &[&user_id], // Maintenant le driver sait comment sérialiser i64
             )
             .await;
 
         match result {
             Ok(row) => {
-                let exists: bool = row.try_get(0)
+                let exists: bool = row
+                    .try_get(0)
                     .map_err(|e| QueryError::MappingError(e.to_string()))?;
                 Ok(DoesUserExistByIdQueryResultView::new(exists))
             }
@@ -47,7 +48,7 @@ impl Query for DoesUserExistByIdQuery {
                 } else {
                     Err(QueryError::from(e))
                 }
-            },
+            }
         }
     }
 }

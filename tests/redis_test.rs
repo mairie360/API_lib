@@ -1,5 +1,5 @@
 pub mod common;
-use common::redis_setup::{start_redis_container, set_redis_env_var, get_redis_connection};
+use common::redis_setup::{get_redis_connection, set_redis_env_var, start_redis_container};
 
 #[cfg(test)]
 mod unsecured_redis_tests {
@@ -26,7 +26,10 @@ mod unsecured_redis_tests {
         add_key(&mut conn, "unique_key", "value1").await.unwrap();
         let res2 = add_key(&mut conn, "unique_key", "value2").await;
 
-        assert!(res2.is_err(), "The second addition should fail due to duplicate key");
+        assert!(
+            res2.is_err(),
+            "The second addition should fail due to duplicate key"
+        );
     }
 
     #[tokio::test]
@@ -96,7 +99,9 @@ mod safe_redis_tests {
         let (_node, config) = start_redis_container().await;
         let mut conn = get_redis_connection(&config).await;
 
-        secure_add_key(&mut conn, "test_key", "test_value").await.unwrap();
+        secure_add_key(&mut conn, "test_key", "test_value")
+            .await
+            .unwrap();
         let value = secure_get_key(&mut conn, "test_key").await.unwrap();
         assert_eq!(value, "test_value");
     }
@@ -107,7 +112,9 @@ mod safe_redis_tests {
         let (_node, config) = start_redis_container().await;
         let mut conn = get_redis_connection(&config).await;
 
-        secure_add_key(&mut conn, "test_key", "test_value").await.unwrap();
+        secure_add_key(&mut conn, "test_key", "test_value")
+            .await
+            .unwrap();
         secure_delete_key(&mut conn, "test_key").await.unwrap();
         assert!(secure_get_key(&mut conn, "test_key").await.is_err());
     }
@@ -116,7 +123,9 @@ mod safe_redis_tests {
 #[cfg(test)]
 mod redis_manager_test {
     use super::*;
-    use mairie360_api_lib::redis::redis_manager::{create_redis_manager, get_redis_manager, RedisManager};
+    use mairie360_api_lib::redis::redis_manager::{
+        create_redis_manager, get_redis_manager, RedisManager,
+    };
     use serial_test::serial;
     use temp_env;
 

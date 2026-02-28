@@ -22,7 +22,8 @@ impl AboutUserQueryView {
 
 impl DatabaseQueryView for AboutUserQueryView {
     fn get_request(&self) -> String {
-        "SELECT first_name, last_name, email, phone_number, status FROM users WHERE id = $1".to_string()
+        "SELECT first_name, last_name, email, phone_number, status FROM users WHERE id = $1"
+            .to_string()
     }
     fn get_raw_request(&self) -> String {
         format!(

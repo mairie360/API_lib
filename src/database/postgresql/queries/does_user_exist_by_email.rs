@@ -24,7 +24,9 @@ impl Query for DoesUserExistByEmailQuery {
 
     async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error> {
         if !self.view.get_email().contains('@') {
-            return Err(QueryError::InvalidEmailFormat(self.view.get_email().clone()));
+            return Err(QueryError::InvalidEmailFormat(
+                self.view.get_email().clone(),
+            ));
         }
 
         let email = self.view.get_email();
@@ -34,7 +36,8 @@ impl Query for DoesUserExistByEmailQuery {
 
         match result {
             Ok(row) => {
-                let exists: bool = row.try_get(0)
+                let exists: bool = row
+                    .try_get(0)
                     .map_err(|e| QueryError::MappingError(e.to_string()))?;
                 Ok(DoesUserExistByEmailQueryResultView::new(exists))
             }

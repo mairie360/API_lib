@@ -1,9 +1,9 @@
-use testcontainers::GenericImage;
-use testcontainers::runners::AsyncRunner;
-use testcontainers::core::{ContainerPort, WaitFor};
-use testcontainers::ContainerAsync;
-use std::env;
 use redis::Client;
+use std::env;
+use testcontainers::core::{ContainerPort, WaitFor};
+use testcontainers::runners::AsyncRunner;
+use testcontainers::ContainerAsync;
+use testcontainers::GenericImage;
 
 pub struct RedisTestConfig {
     pub url: String,

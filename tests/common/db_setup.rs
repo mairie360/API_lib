@@ -1,10 +1,10 @@
 use std::env;
 use std::time::Duration;
-use testcontainers::GenericImage;
-use testcontainers::runners::AsyncRunner;
-use testcontainers::ImageExt;
 use testcontainers::core::ContainerPort;
+use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
+use testcontainers::GenericImage;
+use testcontainers::ImageExt;
 use tokio_postgres::NoTls;
 
 pub struct TestDbConfig {

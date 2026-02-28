@@ -29,11 +29,21 @@ impl RegisterUserQueryView {
         }
     }
 
-    pub fn get_first_name(&self) -> &String { &self.first_name }
-    pub fn get_last_name(&self) -> &String { &self.last_name }
-    pub fn get_email(&self) -> &String { &self.email }
-    pub fn get_password(&self) -> &String { &self.password }
-    pub fn get_phone_number(&self) -> &Option<String> { &self.phone_number }
+    pub fn get_first_name(&self) -> &String {
+        &self.first_name
+    }
+    pub fn get_last_name(&self) -> &String {
+        &self.last_name
+    }
+    pub fn get_email(&self) -> &String {
+        &self.email
+    }
+    pub fn get_password(&self) -> &String {
+        &self.password
+    }
+    pub fn get_phone_number(&self) -> &Option<String> {
+        &self.phone_number
+    }
 }
 
 impl DatabaseQueryView for RegisterUserQueryView {
@@ -42,12 +52,12 @@ impl DatabaseQueryView for RegisterUserQueryView {
             // Avec numéro de téléphone : 5 arguments
             Some(_) => "INSERT INTO users (first_name, last_name, email, password, phone_number) \
                         VALUES ($1, $2, $3, $4, $5)"
-                        .to_string(),
+                .to_string(),
 
             // Sans numéro de téléphone : 4 arguments
             None => "INSERT INTO users (first_name, last_name, email, password) \
                     VALUES ($1, $2, $3, $4)"
-                    .to_string(),
+                .to_string(),
         }
     }
 

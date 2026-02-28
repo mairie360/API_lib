@@ -3,8 +3,6 @@ use crate::database::errors::DatabaseError;
 use crate::env_manager::get_critical_env_var;
 use async_trait::async_trait;
 use std::error::Error;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
 use tokio_postgres::{Client, NoTls};
@@ -91,33 +89,31 @@ impl PostgreInterface {
 
 #[async_trait]
 impl DatabaseInterfaceActions for PostgreInterface {
-    fn connect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, DatabaseError>> + Send>> {
+    async fn connect(&mut self) -> Result<String, DatabaseError> {
         let client_ref = self.client.clone();
         let config = format!(
             "host={} port={} user={} password={} dbname={}",
             self.db_host, self.db_port, self.db_user, self.db_password, self.db_name
         );
 
-        Box::pin(async move {
-            let (client, connection) = tokio_postgres::connect(config.as_str(), NoTls)
-                .await
-                .map_err(|e| DatabaseError::ConnectionFailed(format!("Failed to connect: {}", e)))?;
+        let (client, connection) = tokio_postgres::connect(config.as_str(), NoTls)
+            .await
+            .map_err(|e| DatabaseError::ConnectionFailed(format!("Failed to connect: {}", e)))?;
 
-            // Spawn the connection future
-            tokio::spawn(async move {
-                if let Err(e) = connection.await {
-                    eprintln!("Connection error: {}", e);
-                }
-            });
+        // Spawn the connection future
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                eprintln!("Connection error: {}", e);
+            }
+        });
 
-            *client_ref.lock().await = Some(client);
+        *client_ref.lock().await = Some(client);
 
-            Ok("PostgreSQL Connected".to_string())
-        })
+        Ok("PostgreSQL Connected".to_string())
     }
 
-    fn disconnect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, DatabaseError>> + Send>> {
-        Box::pin(async move { Ok(String::from("PostgreSql Disconnected")) })
+    async fn disconnect(&mut self) -> Result<String, DatabaseError> {
+        Ok(String::from("PostgreSql Disconnected"))
     }
 
     async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, Box<dyn Error + Send + Sync>>
@@ -127,8 +123,13 @@ impl DatabaseInterfaceActions for PostgreInterface {
         let client = self.get_client();
         let locked_client = client.lock().await;
         match &*locked_client {
-            Some(ref client) => query.execute(client).await.map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>),
-            None => Err(Box::new(DatabaseError::Internal("Database client is not connected".to_string()))),
+            Some(ref client) => query
+                .execute(client)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>),
+            None => Err(Box::new(DatabaseError::Internal(
+                "Database client is not connected".to_string(),
+            ))),
         }
     }
 }

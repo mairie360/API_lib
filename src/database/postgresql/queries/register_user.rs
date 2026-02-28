@@ -31,33 +31,40 @@ impl Query for RegisterUserQuery {
     async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error> {
         let result = match self.view.get_phone_number() {
             Some(phone) => {
-                client.execute(
-                    self.view.get_request().as_str(),
-                    &[
-                        &self.view.get_first_name().as_str(), // $1: &str
-                        &self.view.get_last_name().as_str(),  // $2: &str
-                        &self.view.get_email().as_str(),      // $3: &str
-                        &self.view.get_password().as_str(),   // $4: &str
-                        &phone.as_str(),                      // $5: &str
-                    ],
-                ).await
+                client
+                    .execute(
+                        self.view.get_request().as_str(),
+                        &[
+                            &self.view.get_first_name().as_str(), // $1: &str
+                            &self.view.get_last_name().as_str(),  // $2: &str
+                            &self.view.get_email().as_str(),      // $3: &str
+                            &self.view.get_password().as_str(),   // $4: &str
+                            &phone.as_str(),                      // $5: &str
+                        ],
+                    )
+                    .await
             }
             None => {
-                client.execute(
-                    self.view.get_request().as_str(),
-                    &[
-                        &self.view.get_first_name().as_str(),
-                        &self.view.get_last_name().as_str(),
-                        &self.view.get_email().as_str(),
-                        &self.view.get_password().as_str(),
-                    ],
-                ).await
+                client
+                    .execute(
+                        self.view.get_request().as_str(),
+                        &[
+                            &self.view.get_first_name().as_str(),
+                            &self.view.get_last_name().as_str(),
+                            &self.view.get_email().as_str(),
+                            &self.view.get_password().as_str(),
+                        ],
+                    )
+                    .await
             }
         };
 
         match result {
             Ok(1) => Ok(RegisterUserQueryResultView::new(Ok(()))),
-            Ok(actual) => Err(QueryError::AffectedRowsMismatch { expected: 1, actual }),
+            Ok(actual) => Err(QueryError::AffectedRowsMismatch {
+                expected: 1,
+                actual,
+            }),
             Err(e) => Err(QueryError::from(e)),
         }
     }

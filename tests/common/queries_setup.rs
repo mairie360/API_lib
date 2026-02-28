@@ -1,13 +1,15 @@
 use mairie360_api_lib::database::db_interface::{get_db_interface, init_db_interface};
 use mairie360_api_lib::database::errors::DatabaseError;
-use mairie360_api_lib::database::postgresql::postgre_interface::{get_postgre_interface, reset_postgre_interface};
-use testcontainers::GenericImage;
-use testcontainers::runners::AsyncRunner;
-use testcontainers::ImageExt;
-use testcontainers::core::ContainerPort;
-use testcontainers::ContainerAsync;
+use mairie360_api_lib::database::postgresql::postgre_interface::{
+    get_postgre_interface, reset_postgre_interface,
+};
 use std::env;
 use std::time::Duration;
+use testcontainers::core::ContainerPort;
+use testcontainers::runners::AsyncRunner;
+use testcontainers::ContainerAsync;
+use testcontainers::GenericImage;
+use testcontainers::ImageExt;
 
 /**
  * Setup a test database container and initialize the library interface.
@@ -47,7 +49,9 @@ pub async fn setup_tests() -> ContainerAsync<GenericImage> {
             if let Some(db) = guard.as_mut() {
                 db.connect().await
             } else {
-                Err(DatabaseError::Internal("PostgreInterface not initialized".to_string()))
+                Err(DatabaseError::Internal(
+                    "PostgreInterface not initialized".to_string(),
+                ))
             }
         };
 
@@ -65,7 +69,9 @@ pub async fn setup_tests() -> ContainerAsync<GenericImage> {
         let postgre = p_guard.as_ref().unwrap();
         let client_mutex = postgre.get_client();
         let locked_client = client_mutex.lock().await;
-        let client = locked_client.as_ref().expect("Client tokio-postgres non connecté");
+        let client = locked_client
+            .as_ref()
+            .expect("Client tokio-postgres non connecté");
 
         client.batch_execute("
             CREATE TABLE IF NOT EXISTS users (

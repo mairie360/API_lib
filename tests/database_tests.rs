@@ -1,8 +1,8 @@
 pub mod common;
-use common::db_setup::{start_postgres_container, set_db_env_vars};
+use common::db_setup::{set_db_env_vars, start_postgres_container};
 use mairie360_api_lib::database::db_interface::{get_db_interface, init_db_interface};
-use mairie360_api_lib::database::postgresql::postgre_interface::reset_postgre_interface;
 use mairie360_api_lib::database::errors::DatabaseError;
+use mairie360_api_lib::database::postgresql::postgre_interface::reset_postgre_interface;
 use serial_test::serial;
 
 // Helper interne pour gérer le lock empoisonné sans crash
@@ -51,16 +51,20 @@ async fn test_interface_connection_fail_wrong_password() {
         db.connect().await
     };
 
-    assert!(res.is_err(), "La connexion aurait dû échouer avec un mauvais mot de passe");
+    assert!(
+        res.is_err(),
+        "La connexion aurait dû échouer avec un mauvais mot de passe"
+    );
 
     if let Err(DatabaseError::ConnectionFailed(m)) = res {
         // On vérifie que le message mentionne un problème d'authentification ou de connexion
         let m_lower = m.to_lowercase();
         assert!(
-            m_lower.contains("authentication failed") ||
-            m_lower.contains("password") ||
-            m_lower.contains("failed to connect"),
-            "Message d'erreur inattendu : {}", m
+            m_lower.contains("authentication failed")
+                || m_lower.contains("password")
+                || m_lower.contains("failed to connect"),
+            "Message d'erreur inattendu : {}",
+            m
         );
     } else {
         panic!("Type d'erreur inattendu : {:?}", res.err());

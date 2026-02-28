@@ -32,10 +32,12 @@ impl Query for LoginUserQuery {
         match result {
             Ok(Some(row)) => {
                 // L'utilisateur existe, on extrait l'ID et le mot de passe stocké
-                let user_id: i32 = row.try_get("id")
+                let user_id: i32 = row
+                    .try_get("id")
                     .map_err(|e| QueryError::MappingError(e.to_string()))?;
 
-                let db_password: String = row.try_get("password")
+                let db_password: String = row
+                    .try_get("password")
                     .map_err(|e| QueryError::MappingError(e.to_string()))?;
 
                 // 2. Comparaison du mot de passe

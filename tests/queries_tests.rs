@@ -2,13 +2,14 @@ pub mod common;
 use common::queries_setup::setup_tests;
 
 use mairie360_api_lib::database::db_interface::{get_db_interface, QueryResultView};
-use mairie360_api_lib::database::postgresql::queries::{
-    AboutUserQuery, DoesUserExistByEmailQuery, DoesUserExistByIdQuery, LoginUserQuery, RegisterUserQuery
-};
 use mairie360_api_lib::database::postgresql::queries::errors::QueryError;
+use mairie360_api_lib::database::postgresql::queries::{
+    AboutUserQuery, DoesUserExistByEmailQuery, DoesUserExistByIdQuery, LoginUserQuery,
+    RegisterUserQuery,
+};
 use mairie360_api_lib::database::queries_result_views::utils::QueryResult;
-use serial_test::serial;
 use serde_json::json;
+use serial_test::serial;
 
 #[cfg(test)]
 mod queries_tests {
@@ -26,7 +27,8 @@ mod queries_tests {
             let guard = get_db_interface().lock().unwrap();
             let db = guard.as_ref().unwrap();
             db.execute_query(query).await
-        }.unwrap();
+        }
+        .unwrap();
 
         assert_eq!(result.get_result(), QueryResult::Boolean(true));
     }
@@ -41,7 +43,8 @@ mod queries_tests {
             let guard = get_db_interface().lock().unwrap();
             let db = guard.as_ref().unwrap();
             db.execute_query(query).await
-        }.unwrap();
+        }
+        .unwrap();
 
         assert_eq!(result.get_result(), QueryResult::Boolean(false));
     }
@@ -56,7 +59,8 @@ mod queries_tests {
             let guard = get_db_interface().lock().unwrap();
             let db = guard.as_ref().unwrap();
             db.execute_query(query).await
-        }.unwrap();
+        }
+        .unwrap();
 
         assert_eq!(result.get_result(), QueryResult::Boolean(true));
     }
@@ -77,7 +81,10 @@ mod queries_tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         if let Some(query_err) = err.downcast_ref::<QueryError>() {
-            assert_eq!(query_err, &QueryError::InvalidEmailFormat(email.to_string()));
+            assert_eq!(
+                query_err,
+                &QueryError::InvalidEmailFormat(email.to_string())
+            );
         } else {
             panic!("Failed to downcast to QueryError");
         }
@@ -95,7 +102,8 @@ mod queries_tests {
             let guard = get_db_interface().lock().unwrap();
             let db = guard.as_ref().unwrap();
             db.execute_query(query).await
-        }.unwrap();
+        }
+        .unwrap();
 
         assert_eq!(result.get_result(), QueryResult::U64(1));
     }
@@ -153,14 +161,19 @@ mod queries_tests {
         let email = "new_user@test.com";
 
         let register_query = RegisterUserQuery::new(
-            "John", "Doe", email, "secure_password", Some("0601020304".to_string()),
+            "John",
+            "Doe",
+            email,
+            "secure_password",
+            Some("0601020304".to_string()),
         );
 
         let register_result = {
             let guard = get_db_interface().lock().unwrap();
             let db = guard.as_ref().unwrap();
             db.execute_query(register_query).await
-        }.unwrap();
+        }
+        .unwrap();
 
         assert_eq!(register_result.get_result(), QueryResult::Result(Ok(())));
     }
@@ -175,7 +188,8 @@ mod queries_tests {
             let guard = get_db_interface().lock().unwrap();
             let db = guard.as_ref().unwrap();
             db.execute_query(query).await
-        }.unwrap();
+        }
+        .unwrap();
 
         let expected_json = json!({
             "first_name": "Alice",
@@ -237,27 +251,30 @@ mod sql_injection_tests {
         assert!(result.is_err());
         let err = result.err().unwrap();
         if let Some(query_err) = err.downcast_ref::<QueryError>() {
-            assert_eq!(query_err, &QueryError::EmailNotFound(malicious_email.to_string()));
+            assert_eq!(
+                query_err,
+                &QueryError::EmailNotFound(malicious_email.to_string())
+            );
         } else {
             panic!("L'injection a causé une erreur inattendue ou a réussi");
         }
     }
 
-   #[tokio::test]
+    #[tokio::test]
     #[serial]
     async fn test_injection_register_fields() {
         let _container = setup_tests().await;
 
         let malicious_name = "John'); DROP TABLE users; --";
-        let register_query = RegisterUserQuery::new(
-            malicious_name, "Doe", "attacker@test.com", "pass", None
-        );
+        let register_query =
+            RegisterUserQuery::new(malicious_name, "Doe", "attacker@test.com", "pass", None);
 
         let result = {
             let guard = get_db_interface().lock().unwrap();
             let db = guard.as_ref().unwrap();
             db.execute_query(register_query).await
-        }.unwrap();
+        }
+        .unwrap();
 
         assert_eq!(result.get_result(), QueryResult::Result(Ok(())));
 
@@ -267,7 +284,8 @@ mod sql_injection_tests {
             let guard = get_db_interface().lock().unwrap();
             let db = guard.as_ref().unwrap();
             db.execute_query(check_query).await
-        }.unwrap();
+        }
+        .unwrap();
 
         assert_eq!(check_result.get_result(), QueryResult::Boolean(true));
     }

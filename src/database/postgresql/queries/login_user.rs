@@ -1,4 +1,5 @@
 use crate::database::db_interface::{DatabaseQueryView, Query};
+use crate::database::postgresql::queries::errors::QueryError;
 use crate::database::queries_result_views::LoginUserQueryResultView;
 use crate::database::query_views::LoginUserQueryView;
 use async_trait::async_trait;
@@ -19,20 +20,36 @@ impl LoginUserQuery {
 #[async_trait]
 impl Query for LoginUserQuery {
     type Output = LoginUserQueryResultView;
+    type Error = QueryError;
 
-    async fn execute(&self, client: &Client) -> Result<Self::Output, String> {
+    async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error> {
+        // 1. On cherche l'utilisateur par email uniquement
         let result = client
-            .query_one(self.view.get_request().as_str(), &[])
+            .query_opt(self.view.get_request().as_str(), &[])
             .await;
+
         match result {
-            Ok(row) => {
-                let user_id = row.get::<&str, i32>("id") as u64;
-                Ok(LoginUserQueryResultView::new(user_id))
+            Ok(Some(row)) => {
+                // L'utilisateur existe, on extrait l'ID et le mot de passe stocké
+                let user_id = row.try_get::<&str, i32>("id")
+                    .map_err(|e| QueryError::MappingError(e.to_string()))? as u64;
+
+                let db_password: String = row.try_get("password")
+                    .map_err(|e| QueryError::MappingError(e.to_string()))?;
+
+                // 2. Comparaison du mot de passe
+                if db_password == *self.view.get_password() {
+                    Ok(LoginUserQueryResultView::new(user_id))
+                } else {
+                    // Email trouvé, mais mot de passe incorrect
+                    Err(QueryError::InvalidPassword(self.view.get_email().clone()))
+                }
             }
-            Err(_) => {
-                // Correspond à ta logique : renvoie un view avec ID 0 en cas d'erreur
-                Ok(LoginUserQueryResultView::new(0))
+            Ok(None) => {
+                // Aucune ligne renvoyée : l'email n'existe pas en base
+                Err(QueryError::EmailNotFound(self.view.get_email().clone()))
             }
+            Err(e) => Err(QueryError::from(e)),
         }
     }
 }

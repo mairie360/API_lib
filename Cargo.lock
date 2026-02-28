@@ -1481,6 +1481,7 @@ dependencies = [
  "serial_test",
  "temp-env",
  "testcontainers",
+ "thiserror",
  "tokio",
  "tokio-postgres",
 ]

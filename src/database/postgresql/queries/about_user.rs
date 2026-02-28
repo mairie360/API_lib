@@ -1,4 +1,5 @@
 use crate::database::db_interface::{DatabaseQueryView, Query};
+use crate::database::postgresql::queries::errors::QueryError;
 use crate::database::queries_result_views::AboutUserQueryResultView;
 use crate::database::query_views::AboutUserQueryView;
 use async_trait::async_trait;
@@ -19,23 +20,31 @@ impl AboutUserQuery {
 #[async_trait]
 impl Query for AboutUserQuery {
     type Output = AboutUserQueryResultView;
+    type Error = QueryError;
 
-    async fn execute(&self, client: &Client) -> Result<Self::Output, String> {
+    async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error> {
         let result = client
             .query_one(self.view.get_request().as_str(), &[])
             .await;
+
         match result {
             Ok(row) => {
-                // Utilisation des noms de colonnes pour la clarté
-                Ok(AboutUserQueryResultView::new(
-                    row.get("first_name"),
-                    row.get("last_name"),
-                    row.get("email"),
-                    row.get("phone_number"),
-                    row.get("status"),
-                ))
+                let first_name = row.try_get("first_name").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let last_name = row.try_get("last_name").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let email = row.try_get("email").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let phone = row.try_get("phone_number").map_err(|e| QueryError::MappingError(e.to_string()))?;
+                let status = row.try_get("status").map_err(|e| QueryError::MappingError(e.to_string()))?;
+
+                Ok(AboutUserQueryResultView::new(first_name, last_name, email, phone, status))
             }
-            Err(e) => Err(format!("Database query error: {}", e)),
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("0 rows") || err_msg.contains("unexpected number of rows") {
+                    Err(QueryError::InvalidId("User ID not found".to_string()))
+                } else {
+                    Err(QueryError::from(e))
+                }
+            }
         }
     }
 }

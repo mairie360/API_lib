@@ -29,8 +29,8 @@ impl LoginUserQueryView {
 impl DatabaseQueryView for LoginUserQueryView {
     fn get_request(&self) -> String {
         format!(
-            "SELECT id FROM users WHERE email = '{}' AND password = '{}'",
-            self.email, self.password
+            "SELECT id, password FROM users WHERE email = '{}'",
+            self.email
         )
     }
 

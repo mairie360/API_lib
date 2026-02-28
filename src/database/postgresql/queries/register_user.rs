@@ -1,4 +1,5 @@
 use crate::database::db_interface::{DatabaseQueryView, Query};
+use crate::database::postgresql::queries::errors::QueryError;
 use crate::database::queries_result_views::RegisterUserQueryResultView;
 use crate::database::query_views::RegisterUserQueryView;
 use async_trait::async_trait;
@@ -25,13 +26,15 @@ impl RegisterUserQuery {
 #[async_trait]
 impl Query for RegisterUserQuery {
     type Output = RegisterUserQueryResultView;
+    type Error = QueryError;
 
-    async fn execute(&self, client: &Client) -> Result<Self::Output, String> {
+    async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error> {
         let result = client.execute(self.view.get_request().as_str(), &[]).await;
+
         match result {
             Ok(1) => Ok(RegisterUserQueryResultView::new(Ok(()))),
-            Ok(_) => Err("Unexpected number of rows affected".to_string()),
-            Err(e) => Err(format!("Database query error: {}", e)),
+            Ok(actual) => Err(QueryError::AffectedRowsMismatch { expected: 1, actual }),
+            Err(e) => Err(QueryError::from(e)),
         }
     }
 }

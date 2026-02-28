@@ -4,9 +4,12 @@ use mairie360_api_lib::database::db_interface::{get_db_interface, QueryResultVie
 use mairie360_api_lib::database::postgresql::queries::{
     AboutUserQuery, DoesUserExistByEmailQuery, DoesUserExistByIdQuery, LoginUserQuery, RegisterUserQuery
 };
+use mairie360_api_lib::database::postgresql::queries::errors::QueryError;
 use mairie360_api_lib::database::queries_result_views::utils::QueryResult;
 use serial_test::serial;
 use serde_json::json;
+
+// --- TESTS D'EXISTENCE ---
 
 #[tokio::test]
 #[serial]
@@ -20,7 +23,6 @@ async fn test_user_exists() {
         db.execute_query(query).await
     }.unwrap();
 
-    // Comparaison directe de l'enum QueryResult
     assert_eq!(result.get_result(), QueryResult::Boolean(true));
 }
 
@@ -56,6 +58,91 @@ async fn test_user_exists_by_email() {
 
 #[tokio::test]
 #[serial]
+async fn test_user_exists_by_email_invalid_format() {
+    let _container = common::setup_test_db().await;
+    let email = "invalid-email";
+    let query = DoesUserExistByEmailQuery::new(email);
+
+    let result = {
+        let guard = get_db_interface().lock().unwrap();
+        let db = guard.as_ref().unwrap();
+        db.execute_query(query).await
+    };
+
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    if let Some(query_err) = err.downcast_ref::<QueryError>() {
+        assert_eq!(query_err, &QueryError::InvalidEmailFormat(email.to_string()));
+    } else {
+        panic!("Failed to downcast to QueryError");
+    }
+}
+
+// --- TESTS DE LOGIN ---
+
+#[tokio::test]
+#[serial]
+async fn test_login_user_success() {
+    let _container = common::setup_test_db().await;
+    let query = LoginUserQuery::new("alice@example.com", "password123");
+
+    let result = {
+        let guard = get_db_interface().lock().unwrap();
+        let db = guard.as_ref().unwrap();
+        db.execute_query(query).await
+    }.unwrap();
+
+    assert_eq!(result.get_result(), QueryResult::U64(1));
+}
+
+#[tokio::test]
+#[serial]
+async fn test_login_user_wrong_password() {
+    let _container = common::setup_test_db().await;
+    let email = "alice@example.com";
+    let query = LoginUserQuery::new(email, "wrong_pass");
+
+    let result = {
+        let guard = get_db_interface().lock().unwrap();
+        let db = guard.as_ref().unwrap();
+        db.execute_query(query).await
+    };
+
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    if let Some(query_err) = err.downcast_ref::<QueryError>() {
+        assert_eq!(query_err, &QueryError::InvalidPassword(email.to_string()));
+    } else {
+        panic!("Failed to downcast to QueryError");
+    }
+}
+
+#[tokio::test]
+#[serial]
+async fn test_login_user_unknown_email() {
+    let _container = common::setup_test_db().await;
+    let email = "stranger@danger.com";
+    let query = LoginUserQuery::new(email, "any_password");
+
+    let result = {
+        let guard = get_db_interface().lock().unwrap();
+        let db = guard.as_ref().unwrap();
+        db.execute_query(query).await
+    };
+
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    if let Some(query_err) = err.downcast_ref::<QueryError>() {
+        assert_eq!(query_err, &QueryError::EmailNotFound(email.to_string()));
+    } else {
+        panic!("Failed to downcast to QueryError");
+    }
+}
+
+// --- TESTS DE CRÉATION ET CONSULTATION ---
+
+#[tokio::test]
+#[serial]
 async fn test_register_user_success() {
     let _container = common::setup_test_db().await;
     let email = "new_user@test.com";
@@ -70,63 +157,7 @@ async fn test_register_user_success() {
         db.execute_query(register_query).await
     }.unwrap();
 
-    // Vérifie que le résultat de l'enregistrement est un Ok(()) encapsulé
     assert_eq!(register_result.get_result(), QueryResult::Result(Ok(())));
-}
-
-#[tokio::test]
-#[serial]
-async fn test_login_user_success() {
-    let _container = common::setup_test_db().await;
-    let query = LoginUserQuery::new("alice@example.com", "password123");
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    }.unwrap();
-
-    // On attend l'ID 1 (U64) pour Alice
-    assert_eq!(result.get_result(), QueryResult::U64(1));
-}
-
-#[tokio::test]
-#[serial]
-async fn test_login_user_wrong_password() {
-    let _container = common::setup_test_db().await;
-    let query = LoginUserQuery::new("alice@example.com", "wrong_pass");
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    }.unwrap();
-
-    // Ta logique renvoie 0 en cas d'échec de login
-    assert_eq!(result.get_result(), QueryResult::U64(0));
-}
-
-#[tokio::test]
-#[serial]
-async fn test_login_user_unknown_email() {
-    // 1. Setup : Initialise la base avec Alice (ID 1) uniquement
-    let _container = common::setup_test_db().await;
-
-    // 2. Action : Tentative de login avec un email inexistant
-    let query = LoginUserQuery::new("stranger@danger.com", "any_password");
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    };
-
-    // 3. Assertions
-    // La requête doit réussir (pas d'erreur de communication)
-    assert!(result.is_ok());
-
-    // Mais le résultat doit être l'ID 0 (Utilisateur non trouvé)
-    assert_eq!(result.unwrap().get_result(), QueryResult::U64(0));
 }
 
 #[tokio::test]
@@ -141,7 +172,6 @@ async fn test_about_user_success() {
         db.execute_query(query).await
     }.unwrap();
 
-    // On construit le JSON attendu pour comparer l'enum QueryResult::JSON
     let expected_json = json!({
         "first_name": "Alice",
         "last_name": "Smith",
@@ -151,4 +181,28 @@ async fn test_about_user_success() {
     });
 
     assert_eq!(result.get_result(), QueryResult::JSON(expected_json));
+}
+
+#[tokio::test]
+#[serial]
+async fn test_about_user_fail() {
+    let _container = common::setup_test_db().await;
+    let query = AboutUserQuery::new(999);
+
+    let result = {
+        let guard = get_db_interface().lock().unwrap();
+        let db = guard.as_ref().unwrap();
+        db.execute_query(query).await
+    };
+
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    if let Some(query_err) = err.downcast_ref::<QueryError>() {
+        assert_eq!(
+            query_err,
+            &QueryError::InvalidId("User ID not found".to_string())
+        );
+    } else {
+        panic!("Failed to downcast to QueryError");
+    }
 }

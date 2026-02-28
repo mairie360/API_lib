@@ -1,10 +1,11 @@
 use mairie360_api_lib::database::db_interface::{get_db_interface, init_db_interface};
+use mairie360_api_lib::database::errors::DatabaseError;
 use mairie360_api_lib::database::postgresql::postgre_interface::{get_postgre_interface, reset_postgre_interface};
 use testcontainers::GenericImage;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ImageExt;
 use testcontainers::core::ContainerPort;
-use testcontainers::ContainerAsync; // Ajout nécessaire pour le type de retour
+use testcontainers::ContainerAsync;
 use std::env;
 use std::time::Duration;
 
@@ -12,8 +13,6 @@ use std::time::Duration;
  * Setup a test database container and initialize the library interface.
  * Returns the ContainerAsync object to keep it alive during the test.
  */
-// ... (tes imports restent identiques)
-
 pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
     // 1. Start Container
     let node = GenericImage::new("postgres", "15-alpine")
@@ -28,18 +27,19 @@ pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
     let host = node.get_host().await.unwrap();
     let port = node.get_host_port_ipv4(5432).await.unwrap();
 
-    // 2. Set Env
+    // 2. Set Env pour la lib
     env::set_var("DB_HOST", host.to_string());
     env::set_var("DB_PORT", port.to_string());
     env::set_var("DB_USER", "postgres");
     env::set_var("DB_PASSWORD", "postgres");
     env::set_var("DB_NAME", "postgres");
 
-    // 3. Init Lib
+    // 3. Init Lib : On reset l'interface pour s'assurer qu'elle recharge les variables d'env
     reset_postgre_interface().await;
     init_db_interface().await;
 
     // 4. Robust Connect with retry
+    // On attend que Postgres soit réellement prêt à accepter des connexions
     let mut connected = false;
     for _ in 0..10 {
         let conn_attempt = {
@@ -47,7 +47,7 @@ pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
             if let Some(db) = guard.as_mut() {
                 db.connect().await
             } else {
-                Err("DbInterface not found".to_string())
+                Err(DatabaseError::Internal("PostgreInterface not initialized".to_string()))
             }
         };
 
@@ -59,7 +59,7 @@ pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
     }
     assert!(connected, "Manual connection to test DB failed");
 
-    // 5. Schema Setup (MISE À JOUR ICI)
+    // 5. Schema Setup
     {
         let p_guard = get_postgre_interface().await;
         let postgre = p_guard.as_ref().unwrap();
@@ -76,13 +76,13 @@ pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
                 email TEXT UNIQUE,
                 password TEXT,
                 phone_number TEXT,
-                status TEXT -- Ajout de la colonne manquante
+                status TEXT
             );
 
-            -- On nettoie pour l'idempotence des tests
+            -- Nettoyage pour l'idempotence des tests (indispensable avec serial_test)
             TRUNCATE TABLE users RESTART IDENTITY;
 
-            -- On insère Alice avec TOUTES les infos attendues par le JSON de test
+            -- On insère Alice avec TOUTES les infos pour valider AboutUser et Login
             INSERT INTO users (username, email, first_name, last_name, password, phone_number, status)
             VALUES (
                 'Alice',
@@ -96,5 +96,5 @@ pub async fn setup_test_db() -> ContainerAsync<GenericImage> {
         ").await.expect("Failed to setup test schema");
     }
 
-    node
+    node // On retourne l'objet node pour maintenir le conteneur en vie
 }

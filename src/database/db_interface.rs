@@ -1,7 +1,9 @@
 use super::postgresql::postgre_interface::{create_postgre_interface, get_postgre_interface};
+use crate::database::errors::DatabaseError;
 use crate::database::queries_result_views::utils::QueryResult;
 use crate::database::QUERY;
 use async_trait::async_trait;
+use std::error::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{LazyLock, Mutex};
@@ -26,16 +28,7 @@ pub fn get_db_interface() -> &'static Mutex<Option<DbInterface>> {
     &DB_INTERFACE
 }
 
-/**
- * DatabaseType Enum
- * This enum represents the different types of databases supported by the application.
- * Currently, it supports PostgreSQL and an Unknown type for unsupported databases.
- */
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DatabaseType {
-    PostgreSQL,
-    Unknown,
-}
+//                      -- Query --
 
 /**
  * QueryResultView Trait
@@ -72,9 +65,12 @@ pub trait DatabaseQueryView: Send {
 #[async_trait]
 pub trait Query {
     type Output: QueryResultView;
+    type Error: Error + Send + Sync + 'static;
 
-    async fn execute(&self, client: &Client) -> Result<Self::Output, String>;
+    async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error>;
 }
+
+//                      -- Database Interface --
 
 #[async_trait]
 pub trait DatabaseInterfaceActions: Send {
@@ -83,19 +79,19 @@ pub trait DatabaseInterfaceActions: Send {
      * This method should be implemented by any struct that implements this trait.
      * It is expected to return a Future that resolves to a Result containing a success message or an error message.
      */
-    fn connect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send>>;
+    fn connect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, DatabaseError>> + Send>>;
     /**
      * Disconnects from the database.
      * This method should be implemented by any struct that implements this trait.
      * It is expected to return a Future that resolves to a Result containing a success message or an error message.
      */
-    fn disconnect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send>>;
+    fn disconnect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, DatabaseError>> + Send>>;
     /**
      * Executes a query on the database.
      * This method should be implemented by any struct that implements this trait.
      * It is expected to return a Future that resolves to a Result containing a QueryResultView or an error message.
      */
-    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, String>
+    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, Box<dyn Error + Send + Sync>>
     where
         Q: Query + Send + 'static;
 }
@@ -123,7 +119,7 @@ impl DbInterface {
     /**
      * Connects to the database.
      */
-    pub async fn connect(&mut self) -> Result<String, String> {
+    pub async fn connect(&mut self) -> Result<String, DatabaseError> {
         let mut guard = get_postgre_interface().await;
         if let Some(ref mut postgre_interface) = *guard {
             match postgre_interface.connect().await {
@@ -131,14 +127,14 @@ impl DbInterface {
                 Err(e) => Err(e),
             }
         } else {
-            Err("PostgreInterface not initialized".to_string())
+            Err(DatabaseError::Internal("PostgreInterface not initialized".to_string()))
         }
     }
 
     /**
      * Disconnects from the database.
      */
-    pub async fn disconnect(&mut self) -> Result<String, String> {
+    pub async fn disconnect(&mut self) -> Result<String, DatabaseError> {
         let mut guard = get_postgre_interface().await;
         if let Some(ref mut postgre_interface) = *guard {
             match postgre_interface.disconnect().await {
@@ -146,7 +142,7 @@ impl DbInterface {
                 Err(e) => Err(e),
             }
         } else {
-            Err("PostgreInterface not initialized".to_string())
+            Err(DatabaseError::Internal("PostgreInterface not initialized".to_string()))
         }
     }
 
@@ -155,7 +151,7 @@ impl DbInterface {
      * This method takes a query as a parameter, executes it, and returns the result.
      * It returns a Result containing a QueryResultView or an error message.
      */
-    pub async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, String>
+    pub async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, Box<dyn Error + Send + Sync>>
     where
         Q: Query + Send + 'static,
     {
@@ -163,7 +159,7 @@ impl DbInterface {
         if let Some(ref postgre_interface) = *guard {
             postgre_interface.execute_query(query).await
         } else {
-            Err("PostgreInterface not initialized".to_string())
+            Err(Box::new(DatabaseError::Internal("PostgreInterface not initialized".to_string())) as Box<dyn Error + Send + Sync>)
         }
     }
 }

@@ -9,4 +9,4 @@ pub mod queries_result_views;
 
 pub mod query_views;
 
-pub mod utils;
+pub mod errors;

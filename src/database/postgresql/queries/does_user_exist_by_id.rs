@@ -1,4 +1,5 @@
 use crate::database::db_interface::{DatabaseQueryView, Query};
+use crate::database::postgresql::queries::errors::QueryError;
 use crate::database::queries_result_views::DoesUserExistByIdQueryResultView;
 use crate::database::query_views::DoesUserExistByIdQueryView;
 use async_trait::async_trait;
@@ -19,20 +20,20 @@ impl DoesUserExistByIdQuery {
 #[async_trait]
 impl Query for DoesUserExistByIdQuery {
     type Output = DoesUserExistByIdQueryResultView;
+    type Error = QueryError;
 
-    async fn execute(&self, client: &Client) -> Result<Self::Output, String> {
+    async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error> {
         let result = client
             .query_one(self.view.get_request().as_str(), &[])
             .await;
+
         match result {
             Ok(row) => {
-                let exists: bool = row.get(0);
+                let exists: bool = row.try_get(0)
+                    .map_err(|e| QueryError::MappingError(e.to_string()))?;
                 Ok(DoesUserExistByIdQueryResultView::new(exists))
             }
-            Err(e) => {
-                eprintln!("Error executing query: {}", e);
-                Err(format!("Database query error: {}", e))
-            }
+            Err(_) => Err(QueryError::InvalidId(self.view.get_id().to_string())),
         }
     }
 }

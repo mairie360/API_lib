@@ -12,3 +12,6 @@ pub use login_user::LoginUserQuery;
 
 mod does_user_exist_by_id;
 pub use does_user_exist_by_id::DoesUserExistByIdQuery;
+
+pub mod errors;
+pub use errors::QueryError;

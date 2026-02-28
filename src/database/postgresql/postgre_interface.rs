@@ -1,6 +1,8 @@
 use crate::database::db_interface::{DatabaseInterfaceActions, Query};
+use crate::database::errors::DatabaseError;
 use crate::env_manager::get_critical_env_var;
 use async_trait::async_trait;
+use std::error::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
@@ -89,7 +91,7 @@ impl PostgreInterface {
 
 #[async_trait]
 impl DatabaseInterfaceActions for PostgreInterface {
-    fn connect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send>> {
+    fn connect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, DatabaseError>> + Send>> {
         let client_ref = self.client.clone();
         let config = format!(
             "host={} port={} user={} password={} dbname={}",
@@ -99,7 +101,7 @@ impl DatabaseInterfaceActions for PostgreInterface {
         Box::pin(async move {
             let (client, connection) = tokio_postgres::connect(config.as_str(), NoTls)
                 .await
-                .map_err(|e| format!("Failed to connect: {}", e))?;
+                .map_err(|e| DatabaseError::ConnectionFailed(format!("Failed to connect: {}", e)))?;
 
             // Spawn the connection future
             tokio::spawn(async move {
@@ -114,19 +116,19 @@ impl DatabaseInterfaceActions for PostgreInterface {
         })
     }
 
-    fn disconnect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send>> {
+    fn disconnect(&mut self) -> Pin<Box<dyn Future<Output = Result<String, DatabaseError>> + Send>> {
         Box::pin(async move { Ok(String::from("PostgreSql Disconnected")) })
     }
 
-    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, String>
+    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, Box<dyn Error + Send + Sync>>
     where
         Q: Query + Send + 'static,
     {
         let client = self.get_client();
         let locked_client = client.lock().await;
         match &*locked_client {
-            Some(ref client) => query.execute(client).await,
-            None => Err("Database client is not connected".to_string()),
+            Some(ref client) => query.execute(client).await.map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>),
+            None => Err(Box::new(DatabaseError::Internal("Database client is not connected".to_string()))),
         }
     }
 }

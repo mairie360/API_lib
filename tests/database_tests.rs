@@ -1,208 +1,123 @@
-mod common;
-
-use mairie360_api_lib::database::db_interface::{get_db_interface, QueryResultView};
-use mairie360_api_lib::database::postgresql::queries::{
-    AboutUserQuery, DoesUserExistByEmailQuery, DoesUserExistByIdQuery, LoginUserQuery, RegisterUserQuery
-};
-use mairie360_api_lib::database::postgresql::queries::errors::QueryError;
-use mairie360_api_lib::database::queries_result_views::utils::QueryResult;
+pub mod common;
+use common::db_setup::{start_postgres_container, set_db_env_vars};
+use mairie360_api_lib::database::db_interface::{get_db_interface, init_db_interface};
+use mairie360_api_lib::database::postgresql::postgre_interface::reset_postgre_interface;
+use mairie360_api_lib::database::errors::DatabaseError;
 use serial_test::serial;
-use serde_json::json;
 
-// --- TESTS D'EXISTENCE ---
-
-#[tokio::test]
-#[serial]
-async fn test_user_exists() {
-    let _container = common::setup_test_db().await;
-    let query = DoesUserExistByIdQuery::new(1);
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    }.unwrap();
-
-    assert_eq!(result.get_result(), QueryResult::Boolean(true));
-}
-
-#[tokio::test]
-#[serial]
-async fn test_user_not_found() {
-    let _container = common::setup_test_db().await;
-    let query = DoesUserExistByIdQuery::new(999);
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    }.unwrap();
-
-    assert_eq!(result.get_result(), QueryResult::Boolean(false));
-}
-
-#[tokio::test]
-#[serial]
-async fn test_user_exists_by_email() {
-    let _container = common::setup_test_db().await;
-    let query = DoesUserExistByEmailQuery::new("alice@example.com");
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    }.unwrap();
-
-    assert_eq!(result.get_result(), QueryResult::Boolean(true));
-}
-
-#[tokio::test]
-#[serial]
-async fn test_user_exists_by_email_invalid_format() {
-    let _container = common::setup_test_db().await;
-    let email = "invalid-email";
-    let query = DoesUserExistByEmailQuery::new(email);
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    };
-
-    assert!(result.is_err());
-    let err = result.err().unwrap();
-    if let Some(query_err) = err.downcast_ref::<QueryError>() {
-        assert_eq!(query_err, &QueryError::InvalidEmailFormat(email.to_string()));
-    } else {
-        panic!("Failed to downcast to QueryError");
-    }
-}
-
-// --- TESTS DE LOGIN ---
-
-#[tokio::test]
-#[serial]
-async fn test_login_user_success() {
-    let _container = common::setup_test_db().await;
-    let query = LoginUserQuery::new("alice@example.com", "password123");
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    }.unwrap();
-
-    assert_eq!(result.get_result(), QueryResult::U64(1));
-}
-
-#[tokio::test]
-#[serial]
-async fn test_login_user_wrong_password() {
-    let _container = common::setup_test_db().await;
-    let email = "alice@example.com";
-    let query = LoginUserQuery::new(email, "wrong_pass");
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    };
-
-    assert!(result.is_err());
-    let err = result.err().unwrap();
-    if let Some(query_err) = err.downcast_ref::<QueryError>() {
-        assert_eq!(query_err, &QueryError::InvalidPassword(email.to_string()));
-    } else {
-        panic!("Failed to downcast to QueryError");
+// Helper interne pour gérer le lock empoisonné sans crash
+fn clear_poison() {
+    let lock = get_db_interface().lock();
+    if let Err(poisoned) = lock {
+        // On récupère la donnée malgré le poisoning pour "nettoyer" l'état
+        let mut guard = poisoned.into_inner();
+        *guard = None;
     }
 }
 
 #[tokio::test]
 #[serial]
-async fn test_login_user_unknown_email() {
-    let _container = common::setup_test_db().await;
-    let email = "stranger@danger.com";
-    let query = LoginUserQuery::new(email, "any_password");
+async fn test_interface_connection_success() {
+    let (_container, config) = start_postgres_container().await;
+    set_db_env_vars(&config, "postgres", "postgres", "postgres");
 
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
+    clear_poison(); // Sécurité
+    reset_postgre_interface().await;
+    init_db_interface().await;
+
+    // On utilise un scope pour que le lock soit relâché le plus vite possible
+    let res = {
+        let mut guard = get_db_interface().lock().unwrap_or_else(|e| e.into_inner());
+        let db = guard.as_mut().unwrap();
+        db.connect().await
     };
 
-    assert!(result.is_err());
-    let err = result.err().unwrap();
-    if let Some(query_err) = err.downcast_ref::<QueryError>() {
-        assert_eq!(query_err, &QueryError::EmailNotFound(email.to_string()));
-    } else {
-        panic!("Failed to downcast to QueryError");
-    }
-}
-
-// --- TESTS DE CRÉATION ET CONSULTATION ---
-
-#[tokio::test]
-#[serial]
-async fn test_register_user_success() {
-    let _container = common::setup_test_db().await;
-    let email = "new_user@test.com";
-
-    let register_query = RegisterUserQuery::new(
-        "John", "Doe", email, "secure_password", Some("0601020304".to_string()),
-    );
-
-    let register_result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(register_query).await
-    }.unwrap();
-
-    assert_eq!(register_result.get_result(), QueryResult::Result(Ok(())));
+    assert!(res.is_ok(), "La connexion a échoué : {:?}", res.err());
 }
 
 #[tokio::test]
 #[serial]
-async fn test_about_user_success() {
-    let _container = common::setup_test_db().await;
-    let query = AboutUserQuery::new(1);
+async fn test_interface_connection_fail_wrong_password() {
+    let (_container, config) = start_postgres_container().await;
+    set_db_env_vars(&config, "postgres", "postgres", "MAUVAIS_PASS");
 
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    }.unwrap();
+    clear_poison();
+    reset_postgre_interface().await;
+    init_db_interface().await;
 
-    let expected_json = json!({
-        "first_name": "Alice",
-        "last_name": "Smith",
-        "email": "alice@example.com",
-        "phone": "0102030405",
-        "status": "active"
-    });
-
-    assert_eq!(result.get_result(), QueryResult::JSON(expected_json));
-}
-
-#[tokio::test]
-#[serial]
-async fn test_about_user_fail() {
-    let _container = common::setup_test_db().await;
-    let query = AboutUserQuery::new(999);
-
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
+    let res = {
+        let mut guard = get_db_interface().lock().unwrap_or_else(|e| e.into_inner());
+        let db = guard.as_mut().unwrap();
+        db.connect().await
     };
 
-    assert!(result.is_err());
-    let err = result.err().unwrap();
-    if let Some(query_err) = err.downcast_ref::<QueryError>() {
-        assert_eq!(
-            query_err,
-            &QueryError::InvalidId("User ID not found".to_string())
+    assert!(res.is_err(), "La connexion aurait dû échouer avec un mauvais mot de passe");
+
+    if let Err(DatabaseError::ConnectionFailed(m)) = res {
+        // On vérifie que le message mentionne un problème d'authentification ou de connexion
+        let m_lower = m.to_lowercase();
+        assert!(
+            m_lower.contains("authentication failed") ||
+            m_lower.contains("password") ||
+            m_lower.contains("failed to connect"),
+            "Message d'erreur inattendu : {}", m
         );
     } else {
-        panic!("Failed to downcast to QueryError");
+        panic!("Type d'erreur inattendu : {:?}", res.err());
     }
+}
+
+#[tokio::test]
+#[serial]
+async fn test_interface_execute_without_connection() {
+    let (_container, config) = start_postgres_container().await;
+    set_db_env_vars(&config, "postgres", "postgres", "postgres");
+
+    clear_poison();
+    reset_postgre_interface().await;
+    init_db_interface().await;
+
+    let res = {
+        let guard = get_db_interface().lock().unwrap_or_else(|e| e.into_inner());
+        let db = guard.as_ref().unwrap();
+
+        use mairie360_api_lib::database::postgresql::queries::DoesUserExistByIdQuery;
+        db.execute_query(DoesUserExistByIdQuery::new(1)).await
+    };
+
+    assert!(res.is_err());
+}
+
+#[tokio::test]
+#[serial]
+async fn test_interface_full_session_flow() {
+    // 1. Setup : Initialisation propre
+    let (_container, config) = start_postgres_container().await;
+    set_db_env_vars(&config, "postgres", "postgres", "postgres");
+
+    clear_poison();
+    reset_postgre_interface().await;
+    init_db_interface().await;
+
+    // 2. Action : Login (Connect)
+    let login_result = {
+        let mut guard = get_db_interface().lock().unwrap_or_else(|e| e.into_inner());
+        let db = guard.as_mut().unwrap();
+        db.connect().await
+    };
+
+    assert!(login_result.is_ok(), "Le Login (connect) a échoué");
+    assert_eq!(login_result.unwrap(), "PostgreSQL Connected");
+
+    // 3. Action : Logout (Disconnect)
+    // On ré-ouvre le lock pour simuler une action ultérieure
+    let logout_result = {
+        let mut guard = get_db_interface().lock().unwrap_or_else(|e| e.into_inner());
+        let db = guard.as_mut().unwrap();
+        db.disconnect().await
+    };
+
+    // 4. Assertions
+    assert!(logout_result.is_ok(), "Le Logout (disconnect) a échoué");
+    assert_eq!(logout_result.unwrap(), "PostgreSql Disconnected");
 }

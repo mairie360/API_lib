@@ -1,8 +1,7 @@
-pub mod common;
-use common::db_setup::{set_db_env_vars, start_postgres_container};
 use mairie360_api_lib::database::db_interface::{get_db_interface, init_db_interface};
 use mairie360_api_lib::database::errors::DatabaseError;
 use mairie360_api_lib::database::postgresql::postgre_interface::reset_postgre_interface;
+use mairie360_api_lib::test_setup::db_setup::{set_db_env_vars, start_postgres_container};
 use serial_test::serial;
 
 // Helper interne pour gérer le lock empoisonné sans crash

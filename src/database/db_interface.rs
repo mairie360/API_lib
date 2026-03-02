@@ -1,9 +1,7 @@
 use super::postgresql::postgre_interface::{create_postgre_interface, get_postgre_interface};
 use crate::database::errors::DatabaseError;
 use crate::database::queries_result_views::utils::QueryResult;
-use crate::database::QUERY;
 use async_trait::async_trait;
-use std::error::Error;
 use std::sync::{LazyLock, Mutex};
 use tokio_postgres::Client;
 
@@ -53,20 +51,13 @@ pub trait DatabaseQueryView: Send {
      */
     fn get_request(&self) -> String;
     fn get_raw_request(&self) -> String;
-    /**
-     * Returns the type of query.
-     * This method should be implemented by any struct that implements this trait.
-     * It is expected to return a QUERY enum value representing the type of query.
-     */
-    fn get_query_type(&self) -> QUERY;
 }
 
 #[async_trait]
 pub trait Query {
     type Output: QueryResultView;
-    type Error: Error + Send + Sync + 'static;
 
-    async fn execute(&self, client: &Client) -> Result<Self::Output, Self::Error>;
+    async fn execute(&self, client: &Client) -> Result<Self::Output, DatabaseError>;
 }
 
 //                      -- Database Interface --
@@ -90,7 +81,7 @@ pub trait DatabaseInterfaceActions: Send {
      * This method should be implemented by any struct that implements this trait.
      * It is expected to return a Future that resolves to a Result containing a QueryResultView or an error message.
      */
-    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, Box<dyn Error + Send + Sync>>
+    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, DatabaseError>
     where
         Q: Query + Send + 'static;
 }
@@ -154,10 +145,7 @@ impl DbInterface {
      * This method takes a query as a parameter, executes it, and returns the result.
      * It returns a Result containing a QueryResultView or an error message.
      */
-    pub async fn execute_query<Q>(
-        &self,
-        query: Q,
-    ) -> Result<Q::Output, Box<dyn Error + Send + Sync>>
+    pub async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, DatabaseError>
     where
         Q: Query + Send + 'static,
     {
@@ -165,9 +153,9 @@ impl DbInterface {
         if let Some(ref postgre_interface) = *guard {
             postgre_interface.execute_query(query).await
         } else {
-            Err(Box::new(DatabaseError::Internal(
+            Err(DatabaseError::Internal(
                 "PostgreInterface not initialized".to_string(),
-            )) as Box<dyn Error + Send + Sync>)
+            ))
         }
     }
 }

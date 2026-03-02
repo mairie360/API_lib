@@ -2,7 +2,6 @@ use crate::database::db_interface::{DatabaseInterfaceActions, Query};
 use crate::database::errors::DatabaseError;
 use crate::env_manager::get_critical_env_var;
 use async_trait::async_trait;
-use std::error::Error;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
 use tokio_postgres::{Client, NoTls};
@@ -116,20 +115,16 @@ impl DatabaseInterfaceActions for PostgreInterface {
         Ok(String::from("PostgreSql Disconnected"))
     }
 
-    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, Box<dyn Error + Send + Sync>>
+    async fn execute_query<Q>(&self, query: Q) -> Result<Q::Output, DatabaseError>
     where
         Q: Query + Send + 'static,
     {
-        let client = self.get_client();
-        let locked_client = client.lock().await;
+        let client_ref = self.get_client();
+        let locked_client = client_ref.lock().await;
+
         match &*locked_client {
-            Some(ref client) => query
-                .execute(client)
-                .await
-                .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>),
-            None => Err(Box::new(DatabaseError::Internal(
-                "Database client is not connected".to_string(),
-            ))),
+            Some(ref client) => query.execute(client).await,
+            None => Err(DatabaseError::NotInitialized),
         }
     }
 }

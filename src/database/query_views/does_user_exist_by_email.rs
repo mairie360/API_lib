@@ -1,18 +1,13 @@
 use crate::database::db_interface::DatabaseQueryView;
-use crate::database::QUERY;
 use std::fmt::Display;
 
 pub struct DoesUserExistByEmailQueryView {
     email: String,
-    query: QUERY,
 }
 
 impl DoesUserExistByEmailQueryView {
     pub fn new(email: String) -> Self {
-        Self {
-            email,
-            query: QUERY::DoesUserExistByEmail,
-        }
+        Self { email }
     }
 
     pub fn get_email(&self) -> &String {
@@ -29,10 +24,6 @@ impl DatabaseQueryView for DoesUserExistByEmailQueryView {
             "SELECT EXISTS(SELECT 1 FROM users WHERE email = '{}')",
             self.email
         )
-    }
-
-    fn get_query_type(&self) -> QUERY {
-        self.query
     }
 }
 

@@ -1,6 +1,6 @@
-use mairie360_api_lib::database::db_interface::{get_db_interface, init_db_interface};
-use mairie360_api_lib::database::errors::DatabaseError;
-use mairie360_api_lib::database::postgresql::postgre_interface::{
+use crate::database::db_interface::{get_db_interface, init_db_interface};
+use crate::database::errors::DatabaseError;
+use crate::database::postgresql::postgre_interface::{
     get_postgre_interface, reset_postgre_interface,
 };
 use std::env;

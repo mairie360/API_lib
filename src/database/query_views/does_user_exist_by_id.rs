@@ -1,5 +1,4 @@
 use crate::database::db_interface::DatabaseQueryView;
-use crate::database::QUERY;
 use std::fmt::Display;
 
 /**
@@ -7,7 +6,6 @@ use std::fmt::Display;
  */
 pub struct DoesUserExistByIdQueryView {
     id: u64,
-    query: QUERY,
 }
 
 impl DoesUserExistByIdQueryView {
@@ -21,10 +19,7 @@ impl DoesUserExistByIdQueryView {
      * A new instance of `DoesUserExistByIdQueryView`.
      */
     pub fn new(id: u64) -> Self {
-        Self {
-            id,
-            query: QUERY::DoesUserExistById,
-        }
+        Self { id }
     }
 
     /**
@@ -49,10 +44,6 @@ impl DatabaseQueryView for DoesUserExistByIdQueryView {
             "SELECT EXISTS(SELECT 1 FROM users WHERE id = '{}')",
             self.id
         )
-    }
-
-    fn get_query_type(&self) -> QUERY {
-        self.query
     }
 }
 

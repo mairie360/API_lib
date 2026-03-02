@@ -1,4 +1,7 @@
-use crate::database::utils::does_user_exist_by_id;
+use crate::database::db_interface::get_db_interface;
+use crate::database::db_interface::QueryResultView;
+use crate::database::postgresql::queries::DoesUserExistByIdQuery;
+use crate::database::queries_result_views::utils::get_boolean_from_query_result;
 use crate::jwt_manager::get_timeout_from_jwt;
 use crate::jwt_manager::get_user_id_from_jwt;
 use crate::jwt_manager::verify_jwt_timeout;
@@ -54,33 +57,44 @@ pub async fn check_jwt_validity(jwt: &str) -> Result<(), JWTCheckError> {
         }
     };
 
-    match does_user_exist_by_id(parsed_user_id).await {
-        true => {
-            let timeout: usize = match get_timeout_from_jwt(&jwt) {
+    let query: DoesUserExistByIdQuery = DoesUserExistByIdQuery::new(parsed_user_id as u64);
+
+    let result = {
+        let guard = get_db_interface().lock().unwrap();
+        let db = guard.as_ref().unwrap();
+        db.execute_query(query).await
+    };
+
+    let exist = match result {
+        Ok(res) => get_boolean_from_query_result(res.get_result()),
+        Err(e) => {
+            eprintln!("Database query error: {}", e);
+            return Err(JWTCheckError::DatabaseError);
+        }
+    };
+
+    if exist {
+        let timeout: usize = match get_timeout_from_jwt(&jwt) {
             Some(t) => t,
             None => {
                 eprintln!("Failed to retrieve timeout from JWT.");
                 return Err(JWTCheckError::InvalidToken);
             }
-            };
+        };
 
-            match verify_jwt_timeout(timeout) {
-                Ok(true) => {
-                    Ok(())
-                }
-                Ok(false) => {
-                    eprintln!("JWT token is expired.");
-                    Err(JWTCheckError::ExpiredToken)
-                }
-                Err(e) => {
-                    eprintln!("Error verifying JWT timeout: {}", e);
-                    Err(JWTCheckError::InvalidToken)
-                }
+        match verify_jwt_timeout(timeout) {
+            Ok(true) => Ok(()),
+            Ok(false) => {
+                eprintln!("JWT token is expired.");
+                Err(JWTCheckError::ExpiredToken)
+            }
+            Err(e) => {
+                eprintln!("Error verifying JWT timeout: {}", e);
+                Err(JWTCheckError::InvalidToken)
             }
         }
-        false => {
-            eprintln!("User does not exist with ID: {}", user_id);
-            return Err(JWTCheckError::UnknownUser);
-        }
+    } else {
+        eprintln!("User does not exist with ID: {}", user_id);
+        return Err(JWTCheckError::UnknownUser);
     }
 }

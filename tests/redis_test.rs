@@ -1,5 +1,6 @@
-pub mod common;
-use common::redis_setup::{get_redis_connection, set_redis_env_var, start_redis_container};
+use mairie360_api_lib::test_setup::redis_setup::{
+    get_redis_connection, set_redis_env_var, start_redis_container,
+};
 
 #[cfg(test)]
 mod unsecured_redis_tests {

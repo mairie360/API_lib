@@ -1,6 +1,6 @@
 use super::add_key;
 use super::key_exist;
-use redis::Connection;
+use deadpool_redis::Connection;
 
 /**
  * Securely adds a key to Redis if it does not already exist.
@@ -20,13 +20,12 @@ pub async fn secure_add_key(
     key: &str,
     value: &str,
 ) -> Result<(), redis::RedisError> {
-    match key_exist(conn, key).await {
-        Ok(false) => add_key(conn, key, value).await,
-        Ok(true) => Err(redis::RedisError::from((
+    if key_exist(conn, key).await? {
+        return Err(redis::RedisError::from((
             redis::ErrorKind::Io,
             "Key already exists",
             format!("Key '{}' already exists", key),
-        ))),
-        Err(err) => Err(err),
+        )));
     }
+    add_key(conn, key, value).await
 }

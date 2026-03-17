@@ -1,4 +1,5 @@
-use redis::{Commands, Connection};
+use deadpool_redis::redis::AsyncCommands;
+use deadpool_redis::Connection;
 
 /**
  * Sets a key in Redis with the given value.
@@ -17,17 +18,13 @@ pub async fn set_key(
     key: &str,
     value: &str,
 ) -> Result<(), redis::RedisError> {
-    match conn.set::<&str, &str, String>(key, value) {
-        Ok(response) => {
-            if response == "OK" {
-                Ok(())
-            } else {
-                Err(redis::RedisError::from((
-                    redis::ErrorKind::Io,
-                    "Unexpected SET response",
-                )))
-            }
-        }
-        Err(err) => Err(err),
+    let response: String = conn.set(key, value).await?;
+    if response == "OK" {
+        Ok(())
+    } else {
+        Err(redis::RedisError::from((
+            redis::ErrorKind::Io,
+            "Unexpected SET response",
+        )))
     }
 }

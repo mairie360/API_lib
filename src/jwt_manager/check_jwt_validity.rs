@@ -19,6 +19,7 @@ use sqlx::PgPool;
  * - The token is invalid
  * - The user does not exist in the database
  */
+#[derive(Debug, PartialEq)]
 pub enum JWTCheckError {
     DatabaseError,
     NoTokenProvided,

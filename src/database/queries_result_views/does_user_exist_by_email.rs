@@ -5,6 +5,7 @@ use crate::database::db_interface::QueryResultView;
  * This struct represents the result of a query that checks if a user exists by their email.
  * It implements the QueryResultView trait to provide a way to retrieve the result.
  */
+#[derive(sqlx::FromRow)]
 pub struct DoesUserExistByEmailQueryResultView {
     does_user_exist: bool,
 }

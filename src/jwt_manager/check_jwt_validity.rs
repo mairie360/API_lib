@@ -1,10 +1,11 @@
-use crate::database::db_interface::get_db_interface;
 use crate::database::db_interface::QueryResultView;
-use crate::database::postgresql::queries::DoesUserExistByIdQuery;
+use crate::database::queries::does_user_exist_by_id_query;
 use crate::database::queries_result_views::utils::get_boolean_from_query_result;
+use crate::database::query_views::DoesUserExistByIdQueryView;
 use crate::jwt_manager::get_timeout_from_jwt;
 use crate::jwt_manager::get_user_id_from_jwt;
 use crate::jwt_manager::verify_jwt_timeout;
+use sqlx::PgPool;
 
 /**
  * This module provides functionality to check the validity of a JWT token.
@@ -36,7 +37,7 @@ pub enum JWTCheckError {
  * - `Ok(())` if the token is valid and the user exists.
  * - `Err(JWTCheckError)` if the token is invalid, expired, or the user does not exist.
  */
-pub async fn check_jwt_validity(jwt: &str) -> Result<(), JWTCheckError> {
+pub async fn check_jwt_validity(jwt: &str, pool: PgPool) -> Result<(), JWTCheckError> {
     if jwt.is_empty() {
         eprintln!("No JWT token provided.");
         return Err(JWTCheckError::NoTokenProvided);
@@ -57,13 +58,10 @@ pub async fn check_jwt_validity(jwt: &str) -> Result<(), JWTCheckError> {
         }
     };
 
-    let query: DoesUserExistByIdQuery = DoesUserExistByIdQuery::new(parsed_user_id as u64);
+    let query_view: DoesUserExistByIdQueryView =
+        DoesUserExistByIdQueryView::new(parsed_user_id as u64);
 
-    let result = {
-        let guard = get_db_interface().lock().unwrap();
-        let db = guard.as_ref().unwrap();
-        db.execute_query(query).await
-    };
+    let result = does_user_exist_by_id_query(query_view, pool).await;
 
     let exist = match result {
         Ok(res) => get_boolean_from_query_result(res.get_result()),

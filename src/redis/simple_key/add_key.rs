@@ -1,4 +1,5 @@
-use redis::{Commands, Connection};
+use deadpool_redis::redis::AsyncCommands;
+use deadpool_redis::Connection;
 
 /**
  * Adds a key to Redis if it does not already exist.
@@ -19,7 +20,8 @@ pub async fn add_key(
     key: &str,
     value: &str,
 ) -> Result<(), redis::RedisError> {
-    match conn.set_nx::<&str, &str, bool>(key, value) {
+    // Note l'utilisation de .set_nx().await
+    match conn.set_nx::<&str, &str, bool>(key, value).await {
         Ok(true) => Ok(()),
         Ok(false) => Err(redis::RedisError::from((
             redis::ErrorKind::Io,

@@ -1,8 +1,11 @@
-use mairie360_api_lib::jwt_manager::generate_jwt;
-use mairie360_api_lib::jwt_manager::get_jwt_secret;
-use mairie360_api_lib::jwt_manager::get_jwt_timeout;
-use mairie360_api_lib::jwt_manager::get_user_id_from_jwt;
+use mairie360_api_lib::jwt_manager::{
+    check_jwt_validity, generate_jwt, get_jwt_secret, get_jwt_timeout, get_user_id_from_jwt,
+};
+use mairie360_api_lib::test_setup::queries_setup::setup_tests;
 use once_cell::sync::Lazy;
+use serial_test::serial;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
 use std::env;
 
 /**
@@ -38,7 +41,18 @@ fn setup() {
  */
 #[cfg(test)]
 mod jwt_tests {
+    use mairie360_api_lib::jwt_manager::JWTCheckError;
+
     use super::*;
+
+    async fn get_pool(url: String) -> PgPool {
+        PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(std::time::Duration::from_secs(3))
+            .connect(&url) // On passe l'URL construite ici
+            .await
+            .expect("Failed to create Postgres pool")
+    }
 
     /**
      * Tests the retrieval of the JWT secret.
@@ -49,7 +63,6 @@ mod jwt_tests {
     fn test_get_jwt_secret() {
         setup();
         let secret = get_jwt_secret();
-        println!("secret: {:?}", secret);
         assert!(
             secret.is_ok(),
             "Failed to get JWT secret: {:?}",
@@ -128,5 +141,59 @@ mod jwt_tests {
         let invalid_token = "invalid.token.string";
         let user_id = get_user_id_from_jwt(invalid_token);
         assert_eq!(user_id, None, "Expected None for invalid JWT, got Some");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_jwt_check_valid() {
+        setup();
+        let (_container, host) = setup_tests().await;
+        let pool = get_pool(host).await;
+        let token = generate_jwt(USER_ID).unwrap();
+        assert!(
+            check_jwt_validity(&token, pool).await.is_ok(),
+            "JWT validity check failed"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_jwt_check_empty_token() {
+        setup();
+        let (_container, host) = setup_tests().await;
+        let pool = get_pool(host).await;
+        assert_eq!(
+            check_jwt_validity("", pool).await.unwrap_err(),
+            JWTCheckError::NoTokenProvided,
+            "Expected error for invalid JWT"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_jwt_check_token_without_id() {
+        setup();
+        let (_container, host) = setup_tests().await;
+        let pool = get_pool(host).await;
+        let invalid_token = generate_jwt("").unwrap();
+        assert_eq!(
+            check_jwt_validity(&invalid_token, pool).await.unwrap_err(),
+            JWTCheckError::InvalidToken,
+            "Expected error for invalid JWT"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_jwt_check_invalid_user_id() {
+        setup();
+        let (_container, host) = setup_tests().await;
+        let pool = get_pool(host).await;
+        let invalid_token = generate_jwt("8").unwrap();
+        assert_eq!(
+            check_jwt_validity(&invalid_token, pool).await.unwrap_err(),
+            JWTCheckError::UnknownUser,
+            "Expected error for invalid JWT"
+        );
     }
 }

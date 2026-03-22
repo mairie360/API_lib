@@ -1,23 +1,15 @@
-use crate::database::db_interface::{get_db_interface, init_db_interface};
-use crate::database::errors::DatabaseError;
-use crate::database::postgresql::postgre_interface::{
-    get_postgre_interface, reset_postgre_interface,
-};
 use std::env;
-use std::time::Duration;
-use testcontainers::core::ContainerPort;
+use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
-use testcontainers::ContainerAsync;
-use testcontainers::GenericImage;
-use testcontainers::ImageExt;
+use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+use tokio_postgres::NoTls;
 
-/**
- * Setup a test database container and initialize the library interface.
- * Returns the ContainerAsync object to keep it alive during the test.
- */
-pub async fn setup_tests() -> ContainerAsync<GenericImage> {
-    // 1. Start Container
+pub async fn setup_tests() -> (ContainerAsync<GenericImage>, String) {
+    // 1. L'ordre est crucial : d'abord le port, ensuite l'env et le wait
     let node = GenericImage::new("postgres", "15-alpine")
+        .with_wait_for(WaitFor::message_on_stderr(
+            "database system is ready to accept connections",
+        ))
         .with_exposed_port(ContainerPort::Tcp(5432))
         .with_env_var("POSTGRES_USER", "postgres")
         .with_env_var("POSTGRES_PASSWORD", "postgres")
@@ -26,81 +18,60 @@ pub async fn setup_tests() -> ContainerAsync<GenericImage> {
         .await
         .expect("Failed to start Postgres");
 
-    let host = node.get_host().await.unwrap();
-    let port = node.get_host_port_ipv4(5432).await.unwrap();
+    let host = node.get_host().await.expect("Failed to get host");
+    // On utilise bien le port 5432 exposé pour récupérer le port dynamique mappé par Docker
+    let port = node
+        .get_host_port_ipv4(5432)
+        .await
+        .expect("Failed to get port");
 
-    // 2. Set Env pour la lib
+    // 2. Connexion et Setup (Ton code reste identique ici)
+    let postgres_url = format!("postgres://postgres:postgres@{}:{}/postgres", host, port);
     env::set_var("DB_HOST", host.to_string());
     env::set_var("DB_PORT", port.to_string());
-    env::set_var("DB_USER", "postgres");
-    env::set_var("DB_PASSWORD", "postgres");
-    env::set_var("DB_NAME", "postgres");
 
-    // 3. Init Lib : On reset l'interface pour s'assurer qu'elle recharge les variables d'env
-    reset_postgre_interface().await;
-    init_db_interface().await;
+    let (client, connection) = tokio_postgres::connect(&postgres_url, NoTls)
+        .await
+        .expect("Failed to connect to Postgres");
 
-    // 4. Robust Connect with retry
-    // On attend que Postgres soit réellement prêt à accepter des connexions
-    let mut connected = false;
-    for _ in 0..10 {
-        let conn_attempt = {
-            let mut guard = get_db_interface().lock().unwrap();
-            if let Some(db) = guard.as_mut() {
-                db.connect().await
-            } else {
-                Err(DatabaseError::Internal(
-                    "PostgreInterface not initialized".to_string(),
-                ))
-            }
-        };
-
-        if conn_attempt.is_ok() {
-            connected = true;
-            break;
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-    assert!(connected, "Manual connection to test DB failed");
+    });
 
-    // 5. Schema Setup
-    {
-        let p_guard = get_postgre_interface().await;
-        let postgre = p_guard.as_ref().unwrap();
-        let client_mutex = postgre.get_client();
-        let locked_client = client_mutex.lock().await;
-        let client = locked_client
-            .as_ref()
-            .expect("Client tokio-postgres non connecté");
+    client
+        .batch_execute(
+            "
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            first_name TEXT,
+            last_name TEXT,
+            username TEXT,
+            email TEXT UNIQUE,
+            password TEXT,
+            phone_number TEXT,
+            status TEXT
+        );
 
-        client.batch_execute("
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                first_name TEXT,
-                last_name TEXT,
-                username TEXT,
-                email TEXT UNIQUE,
-                password TEXT,
-                phone_number TEXT,
-                status TEXT
-            );
+        -- Nettoyage pour l'idempotence des tests (indispensable avec serial_test)
+        TRUNCATE TABLE users RESTART IDENTITY;
 
-            -- Nettoyage pour l'idempotence des tests (indispensable avec serial_test)
-            TRUNCATE TABLE users RESTART IDENTITY;
+        -- On insère Alice avec TOUTES les infos pour valider AboutUser et Login
+        INSERT INTO users (username, email, first_name, last_name, password, phone_number, status)
+        VALUES (
+            'Alice',
+            'alice@example.com',
+            'Alice',
+            'Smith',
+            'password123',
+            '0102030405',
+            'active'
+        );
+    ",
+        )
+        .await
+        .expect("Failed to setup test schema");
 
-            -- On insère Alice avec TOUTES les infos pour valider AboutUser et Login
-            INSERT INTO users (username, email, first_name, last_name, password, phone_number, status)
-            VALUES (
-                'Alice',
-                'alice@example.com',
-                'Alice',
-                'Smith',
-                'password123',
-                '0102030405',
-                'active'
-            );
-        ").await.expect("Failed to setup test schema");
-    }
-
-    node // On retourne l'objet node pour maintenir le conteneur en vie
+    (node, postgres_url)
 }

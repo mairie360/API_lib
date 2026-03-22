@@ -1,4 +1,5 @@
-use redis::{Commands, Connection};
+use deadpool_redis::redis::AsyncCommands;
+use deadpool_redis::Connection;
 
 /**
  * Check if a key exists in Redis.
@@ -12,8 +13,5 @@ use redis::{Commands, Connection};
  * or an `Err` if there was an error checking the key's existence.
  */
 pub async fn key_exist(conn: &mut Connection, key: &str) -> Result<bool, redis::RedisError> {
-    match conn.exists(key) {
-        Ok(exists) => Ok(exists),
-        Err(err) => Err(err),
-    }
+    conn.exists(key).await
 }

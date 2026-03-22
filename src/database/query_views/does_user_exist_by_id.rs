@@ -28,15 +28,15 @@ impl DoesUserExistByIdQueryView {
      * # Returns
      * A reference to the user's ID.
      */
-    pub fn get_id(&self) -> &u64 {
-        &self.id
+    pub fn get_id(&self) -> u64 {
+        self.id
     }
 }
 
 impl DatabaseQueryView for DoesUserExistByIdQueryView {
     fn get_request(&self) -> String {
         // On utilise $1 au lieu de '{}'
-        "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)".to_string()
+        "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1) AS does_user_exist".to_string()
     }
 
     fn get_raw_request(&self) -> String {

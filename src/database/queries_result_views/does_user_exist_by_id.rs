@@ -4,6 +4,7 @@ use crate::database::db_interface::QueryResultView;
 /**
  * Represents the result of a query that checks if a user exists by their ID.
  */
+#[derive(sqlx::FromRow)]
 pub struct DoesUserExistByIdQueryResultView {
     does_user_exist: bool,
 }

@@ -42,3 +42,13 @@ impl From<tokio_postgres::Error> for DatabaseError {
         }
     }
 }
+
+impl From<sqlx::Error> for DatabaseError {
+    fn from(err: sqlx::Error) -> Self {
+        // Tu peux logger l'erreur ici pour garder une trace
+        eprintln!("Database error: {}", err);
+
+        // On la convertit en ta variante Internal
+        DatabaseError::Internal(err.to_string())
+    }
+}

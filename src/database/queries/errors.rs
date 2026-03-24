@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Clone, Debug, Error, PartialEq)]
 pub enum QueryError {
     /// L'email est mal formé (vérification effectuée avant l'envoi à la DB).
     #[error("Invalid email format: {0}")]

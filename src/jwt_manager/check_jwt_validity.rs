@@ -1,6 +1,4 @@
-use crate::database::db_interface::QueryResultView;
 use crate::database::queries::does_user_exist_by_id_query;
-use crate::database::queries_result_views::utils::get_boolean_from_query_result;
 use crate::database::query_views::DoesUserExistByIdQueryView;
 use crate::jwt_manager::get_timeout_from_jwt;
 use crate::jwt_manager::get_user_id_from_jwt;
@@ -65,7 +63,7 @@ pub async fn check_jwt_validity(jwt: &str, pool: PgPool) -> Result<(), JWTCheckE
     let result = does_user_exist_by_id_query(query_view, pool).await;
 
     let exist = match result {
-        Ok(res) => get_boolean_from_query_result(res.get_result()),
+        Ok(res) => res,
         Err(e) => {
             eprintln!("Database query error: {}", e);
             return Err(JWTCheckError::DatabaseError);

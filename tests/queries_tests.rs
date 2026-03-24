@@ -1,11 +1,9 @@
 use mairie360_api_lib::test_setup::queries_setup::setup_tests;
 
-use mairie360_api_lib::database::db_interface::QueryResultView;
 use mairie360_api_lib::database::queries::QueryError;
 use mairie360_api_lib::database::queries::{
     does_user_exist_by_email_query, does_user_exist_by_id_query,
 };
-use mairie360_api_lib::database::queries_result_views::utils::QueryResult;
 use mairie360_api_lib::database::query_views::{
     DoesUserExistByEmailQueryView, DoesUserExistByIdQueryView,
 };
@@ -15,55 +13,69 @@ use sqlx::PgPool;
 
 #[cfg(test)]
 mod queries_tests {
-    use mairie360_api_lib::database::errors::DatabaseError;
-
     use super::*;
+    use mairie360_api_lib::database::errors::DatabaseError;
 
     async fn get_pool(url: String) -> PgPool {
         PgPoolOptions::new()
             .max_connections(5)
             .acquire_timeout(std::time::Duration::from_secs(3))
-            .connect(&url) // On passe l'URL construite ici
+            .connect(&url)
             .await
             .expect("Failed to create Postgres pool")
     }
 
-    // --- TESTS D'EXISTENCE ---
+    // --- TESTS D'EXISTENCE PAR ID ---
 
     #[tokio::test]
     #[serial]
-    async fn test_user_exists() {
+    async fn test_user_exists_by_id() {
         let (_container, host) = setup_tests().await;
         let pool = get_pool(host).await;
         let view = DoesUserExistByIdQueryView::new(1);
 
+        // On passe pool car les fonctions attendent désormais une référence
         let result = does_user_exist_by_id_query(view, pool).await.unwrap();
 
-        assert_eq!(result.get_result(), QueryResult::Boolean(true));
+        assert!(result); // Plus propre que assert_eq!(result, true)
     }
 
     #[tokio::test]
     #[serial]
-    async fn test_user_not_found() {
+    async fn test_user_id_not_found() {
         let (_container, host) = setup_tests().await;
         let pool = get_pool(host).await;
         let view = DoesUserExistByIdQueryView::new(999);
 
         let result = does_user_exist_by_id_query(view, pool).await.unwrap();
 
-        assert_eq!(result.get_result(), QueryResult::Boolean(false));
+        assert!(!result);
     }
+
+    // --- TESTS D'EXISTENCE PAR EMAIL ---
 
     #[tokio::test]
     #[serial]
-    async fn test_user_exists_by_email() {
+    async fn test_user_exists_by_email_success() {
         let (_container, host) = setup_tests().await;
         let pool = get_pool(host).await;
         let view = DoesUserExistByEmailQueryView::new("alice@example.com".to_string());
 
         let result = does_user_exist_by_email_query(view, pool).await.unwrap();
 
-        assert_eq!(result.get_result(), QueryResult::Boolean(true));
+        assert!(result);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_user_email_not_found() {
+        let (_container, host) = setup_tests().await;
+        let pool = get_pool(host).await;
+        let view = DoesUserExistByEmailQueryView::new("unknown@example.com".to_string());
+
+        let result = does_user_exist_by_email_query(view, pool).await.unwrap();
+
+        assert!(!result);
     }
 
     #[tokio::test]
@@ -76,12 +88,34 @@ mod queries_tests {
 
         let result = does_user_exist_by_email_query(view, pool).await;
 
+        // Ici on valide que ton From<sqlx::Error> ou ta validation manuelle fonctionne
         assert!(result.is_err());
         let err = result.err().unwrap();
-        println!("Received error: {:?}", err);
+
         assert_eq!(
             err,
             DatabaseError::Query(QueryError::InvalidEmailFormat(email.to_string()))
         );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_sql_injection_email_query() {
+        let (_container, host) = setup_tests().await;
+        let pool = get_pool(host).await;
+
+        // Tentative d'injection : si c'était vulnérable, EXISTS retournerait true ou ferait une erreur
+        let malicious_email = "' OR 1=1 --";
+        let view = DoesUserExistByEmailQueryView::new(malicious_email.to_string());
+
+        let result = does_user_exist_by_email_query(view, pool).await;
+
+        // Comme il n'y a pas de '@', ta fonction renvoie l'erreur de format AVANT la DB
+        assert!(result.is_err());
+        if let Err(DatabaseError::Query(QueryError::InvalidEmailFormat(_))) = result {
+            assert!(true);
+        } else {
+            panic!("Should have failed with InvalidEmailFormat");
+        }
     }
 }

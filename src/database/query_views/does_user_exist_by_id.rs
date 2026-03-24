@@ -38,13 +38,6 @@ impl DatabaseQueryView for DoesUserExistByIdQueryView {
         // On utilise $1 au lieu de '{}'
         "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1) AS does_user_exist".to_string()
     }
-
-    fn get_raw_request(&self) -> String {
-        format!(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE id = '{}')",
-            self.id
-        )
-    }
 }
 
 impl Display for DoesUserExistByIdQueryView {

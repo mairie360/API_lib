@@ -1,7 +1,7 @@
 use crate::database::queries::QueryError;
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Clone, Debug, Error, PartialEq)]
 pub enum DatabaseError {
     #[error("Failed to connect to database: {0}")]
     ConnectionFailed(String),
@@ -28,27 +28,32 @@ pub enum DatabaseError {
     Query(#[from] QueryError),
 }
 
-/// Permet de convertir facilement les erreurs tokio_postgres en DatabaseError
-impl From<tokio_postgres::Error> for DatabaseError {
-    fn from(err: tokio_postgres::Error) -> Self {
-        // On peut affiner ici en analysant err.code() si besoin
-        let err_str = err.to_string();
-        if err_str.contains("unique constraint") {
-            DatabaseError::Query(QueryError::ConstraintViolation(err_str))
-        } else if err_str.contains("0 rows") {
-            DatabaseError::Query(QueryError::NoResults)
-        } else {
-            DatabaseError::Query(QueryError::ExecutionFailed(err_str))
-        }
-    }
-}
-
 impl From<sqlx::Error> for DatabaseError {
     fn from(err: sqlx::Error) -> Self {
-        // Tu peux logger l'erreur ici pour garder une trace
-        eprintln!("Database error: {}", err);
+        eprintln!("Database error log: {}", err);
 
-        // On la convertit en ta variante Internal
-        DatabaseError::Internal(err.to_string())
+        match err {
+            // 1. Gestion spécifique de l'absence de ligne (Pour tes tests About/Login)
+            sqlx::Error::RowNotFound => DatabaseError::Query(QueryError::NoResults),
+
+            // 2. Analyse des erreurs renvoyées par Postgres
+            sqlx::Error::Database(db_err) => {
+                // Utilisation des codes d'erreur PostgreSQL (23505 = Unique Violation)
+                if db_err.code().map(|c| c == "23505").unwrap_or(false) {
+                    DatabaseError::Query(QueryError::ConstraintViolation(
+                        db_err.message().to_string(),
+                    ))
+                } else {
+                    DatabaseError::Query(QueryError::ExecutionFailed(db_err.message().to_string()))
+                }
+            }
+
+            // 3. Gestion du pool et timeout
+            sqlx::Error::PoolTimedOut => DatabaseError::Timeout,
+            sqlx::Error::PoolClosed => DatabaseError::ConnectionClosed,
+
+            // 4. Fallback pour le reste
+            _ => DatabaseError::Internal(err.to_string()),
+        }
     }
 }

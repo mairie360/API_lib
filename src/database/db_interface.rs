@@ -1,7 +1,4 @@
 use crate::database::errors::DatabaseError;
-use crate::database::queries_result_views::utils::QueryResult;
-use async_trait::async_trait;
-use tokio_postgres::Client;
 
 /**
  * QueryResultView Trait
@@ -9,9 +6,11 @@ use tokio_postgres::Client;
  * It provides a method to get the result of a query.
  */
 pub trait QueryResultView {
+    type Output;
+
     /// Returns the result of the query as a QueryResult.
     /// This method should be implemented by any struct that implements this trait.
-    fn get_result(&self) -> QueryResult;
+    fn get_result(&self) -> Result<Self::Output, DatabaseError>;
 }
 
 /**
@@ -26,15 +25,4 @@ pub trait DatabaseQueryView: Send {
      * It is expected to return a string representation of the query request.
      */
     fn get_request(&self) -> String;
-    fn get_raw_request(&self) -> String;
-}
-
-#[async_trait]
-pub trait Query {
-    type Output: QueryResultView;
-    type View: DatabaseQueryView;
-
-    async fn execute(&self, client: &Client) -> Result<Self::Output, DatabaseError>;
-
-    fn view(&self) -> &Self::View;
 }

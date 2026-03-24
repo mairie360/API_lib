@@ -19,12 +19,6 @@ impl DatabaseQueryView for DoesUserExistByEmailQueryView {
     fn get_request(&self) -> String {
         "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1) AS does_user_exist".to_string()
     }
-    fn get_raw_request(&self) -> String {
-        format!(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE email = '{}')",
-            self.email
-        )
-    }
 }
 
 impl Display for DoesUserExistByEmailQueryView {

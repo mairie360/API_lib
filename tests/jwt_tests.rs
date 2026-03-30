@@ -1,7 +1,7 @@
 use mairie360_api_lib::jwt_manager::{
     check_jwt_validity, generate_jwt, get_jwt_secret, get_jwt_timeout, get_user_id_from_jwt,
 };
-use mairie360_api_lib::test_setup::queries_setup::setup_tests;
+use mairie360_api_lib::test_setup::queries_setup::setup_tests_full;
 use once_cell::sync::Lazy;
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
@@ -147,7 +147,7 @@ mod jwt_tests {
     #[serial]
     async fn test_jwt_check_valid() {
         setup();
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         let token = generate_jwt(USER_ID).unwrap();
         assert!(
@@ -160,7 +160,7 @@ mod jwt_tests {
     #[serial]
     async fn test_jwt_check_empty_token() {
         setup();
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         assert_eq!(
             check_jwt_validity("", pool).await.unwrap_err(),
@@ -173,7 +173,7 @@ mod jwt_tests {
     #[serial]
     async fn test_jwt_check_token_without_id() {
         setup();
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         let invalid_token = generate_jwt("").unwrap();
         assert_eq!(
@@ -187,7 +187,7 @@ mod jwt_tests {
     #[serial]
     async fn test_jwt_check_invalid_user_id() {
         setup();
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         let invalid_token = generate_jwt("8").unwrap();
         assert_eq!(

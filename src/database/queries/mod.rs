@@ -6,3 +6,6 @@ pub use does_user_exist_by_email::does_user_exist_by_email_query;
 
 mod errors;
 pub use errors::QueryError;
+
+mod is_session_token_valid;
+pub use is_session_token_valid::is_session_token_valid_query;

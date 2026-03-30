@@ -1,15 +1,16 @@
-use mairie360_api_lib::test_setup::queries_setup::setup_tests;
+use mairie360_api_lib::test_setup::queries_setup::setup_tests_full;
 
 use mairie360_api_lib::database::queries::QueryError;
 use mairie360_api_lib::database::queries::{
-    does_user_exist_by_email_query, does_user_exist_by_id_query,
+    does_user_exist_by_email_query, does_user_exist_by_id_query, is_session_token_valid_query,
 };
 use mairie360_api_lib::database::query_views::{
-    DoesUserExistByEmailQueryView, DoesUserExistByIdQueryView,
+    DoesUserExistByEmailQueryView, DoesUserExistByIdQueryView, IsSessionTokenValidQueryView,
 };
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use std::net::IpAddr;
 
 #[cfg(test)]
 mod queries_tests {
@@ -30,7 +31,7 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_exists_by_id() {
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         let view = DoesUserExistByIdQueryView::new(1);
 
@@ -43,7 +44,7 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_id_not_found() {
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         let view = DoesUserExistByIdQueryView::new(999);
 
@@ -57,7 +58,7 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_exists_by_email_success() {
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         let view = DoesUserExistByEmailQueryView::new("alice@example.com".to_string());
 
@@ -69,7 +70,7 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_email_not_found() {
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         let view = DoesUserExistByEmailQueryView::new("unknown@example.com".to_string());
 
@@ -81,7 +82,7 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_exists_by_email_invalid_format() {
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
         let email = "invalid-email";
         let view = DoesUserExistByEmailQueryView::new(email.to_string());
@@ -101,7 +102,7 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_sql_injection_email_query() {
-        let (_container, host) = setup_tests().await;
+        let (_container, host) = setup_tests_full().await;
         let pool = get_pool(host).await;
 
         // Tentative d'injection : si c'était vulnérable, EXISTS retournerait true ou ferait une erreur
@@ -117,5 +118,73 @@ mod queries_tests {
         } else {
             panic!("Should have failed with InvalidEmailFormat");
         }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_is_session_token_valid() {
+        let (_container, host) = setup_tests_full().await;
+        let pool = get_pool(host).await;
+
+        let view = IsSessionTokenValidQueryView::new(
+            1,
+            "test_token_hash_unique_123".to_string(),
+            IpAddr::from([127, 0, 0, 1]),
+        );
+
+        let result = is_session_token_valid_query(view, pool).await.unwrap();
+
+        assert!(result);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_is_session_token_expired() {
+        let (_container, host) = setup_tests_full().await;
+        let pool = get_pool(host).await;
+
+        let view = IsSessionTokenValidQueryView::new(
+            1,
+            "test_token_hash_expired".to_string(),
+            IpAddr::from([127, 0, 0, 1]),
+        );
+
+        let result = is_session_token_valid_query(view, pool).await.unwrap();
+
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_is_session_ip_invalid() {
+        let (_container, host) = setup_tests_full().await;
+        let pool = get_pool(host).await;
+
+        let view = IsSessionTokenValidQueryView::new(
+            1,
+            "test_token_hash_unique_123".to_string(),
+            IpAddr::from([127, 0, 0, 2]),
+        );
+
+        let result = is_session_token_valid_query(view, pool).await.unwrap();
+
+        assert!(!result);
+    }
+    
+    #[tokio::test]
+    #[serial]
+    async fn test_is_session_invalid_archived_user() {
+        let (_container, host) = setup_tests_full().await;
+        let pool = get_pool(host).await;
+
+        let view = IsSessionTokenValidQueryView::new(
+            3,
+            "test_token_hash_unique_123".to_string(),
+            IpAddr::from([127, 0, 0, 1]),
+        );
+
+        let result = is_session_token_valid_query(view, pool).await.unwrap();
+
+        assert!(false, "Need db fix before");
     }
 }

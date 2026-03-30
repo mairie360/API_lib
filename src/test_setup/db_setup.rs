@@ -1,21 +1,54 @@
 use std::env;
 use std::time::Duration;
-use testcontainers::core::ContainerPort;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::ContainerAsync;
-use testcontainers::GenericImage;
-use testcontainers::ImageExt;
+use testcontainers::{ContainerAsync, ImageExt, GenericImage};
 use tokio_postgres::NoTls;
+
+static DB_VERSION: &str = "dev-a2d1176";
 
 pub struct TestDbConfig {
     pub host: String,
     pub port: u16,
 }
 
+/// Lance les migrations Liquibase via ton image personnalisée
+pub async fn run_migrations(_container: &ContainerAsync<GenericImage>) {
+    let liquibase_url = "jdbc:postgresql://127.0.0.1:5432/postgres";
+
+    println!("🚀 Liquibase connectant à : {}", liquibase_url);
+
+    let liquibase_node = GenericImage::new("ghcr.io/mairie360/liquibase-migrations", DB_VERSION)
+        .with_network("host")
+        .with_working_dir("/liquibase/changelog") // On s'assure d'être au bon endroit
+        .with_cmd(vec![
+            "--search-path=/liquibase/changelog", // Argument global (AVANT update)
+            "update",                             // La commande
+            "--url", liquibase_url,
+            "--username", "postgres",
+            "--password", "postgres",
+            "--changelog-file", "changelog.xml",
+        ])
+        .start()
+        .await
+        .expect("Failed to start Liquibase container");
+    
+    while liquibase_node.is_running().await.unwrap() {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    
+    // Logs pour debug
+    let stdout = liquibase_node.stdout_to_vec().await.unwrap_or_default();
+    let stderr = liquibase_node.stderr_to_vec().await.unwrap_or_default();
+    println!("STDOUT: {}", String::from_utf8_lossy(&stdout));
+    eprintln!("STDERR: {}", String::from_utf8_lossy(&stderr));
+    
+    println!("✅ Fin du container Liquibase.");
+}
+
 /// Démarre un conteneur Postgres standard
 pub async fn start_postgres_container() -> (ContainerAsync<GenericImage>, TestDbConfig) {
-    let node = GenericImage::new("postgres", "15-alpine")
-        .with_exposed_port(ContainerPort::Tcp(5432))
+    let node = GenericImage::new("ghcr.io/mairie360/database", DB_VERSION)
+        .with_network("host") // Mode host pour la simplicité sous Linux
         .with_env_var("POSTGRES_USER", "postgres")
         .with_env_var("POSTGRES_PASSWORD", "postgres")
         .with_env_var("POSTGRES_DB", "postgres")
@@ -23,31 +56,26 @@ pub async fn start_postgres_container() -> (ContainerAsync<GenericImage>, TestDb
         .await
         .expect("Failed to start Postgres");
 
-    let host = node.get_host().await.unwrap().to_string();
-    let port = node.get_host_port_ipv4(5432).await.unwrap();
-    let config = TestDbConfig { host, port };
+    // En mode host, on tape directement sur 127.0.0.1:5432
+    let config = TestDbConfig { 
+        host: "127.0.0.1".to_string(), 
+        port: 5432 
+    };
 
-    // --- HEALTHCHECK MANUEL ---
-    // On essaie de se connecter via tokio_postgres directement jusqu'à ce que ça réponde
-    let connection_string = format!(
-        "host={} port={} user=postgres password=postgres dbname=postgres",
-        config.host, config.port
-    );
+    let connection_string = "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=postgres";
 
+    // Healthcheck
     let mut attempts = 0;
     while attempts < 15 {
-        match tokio_postgres::connect(&connection_string, NoTls).await {
-            Ok(_) => break,
-            Err(_) => {
-                tokio::time::sleep(Duration::from_millis(300)).await;
-                attempts += 1;
-            }
-        }
+        if tokio_postgres::connect(connection_string, NoTls).await.is_ok() { break; }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        attempts += 1;
     }
-    // --------------------------
 
+    run_migrations(&node).await;
     (node, config)
 }
+
 /// Configure les variables d'environnement pour la lib
 pub fn set_db_env_vars(config: &TestDbConfig, db_name: &str, user: &str, pass: &str) {
     env::set_var("DB_HOST", &config.host);

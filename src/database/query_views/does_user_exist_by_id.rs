@@ -1,33 +1,15 @@
 use crate::database::db_interface::DatabaseQueryView;
 use std::fmt::Display;
 
-/**
- * Query view to check if a user exists by their ID.
- */
 pub struct DoesUserExistByIdQueryView {
     id: u64,
 }
 
 impl DoesUserExistByIdQueryView {
-    /**
-     * Creates a new instance of `DoesUserExistByIdQueryView`.
-     *
-     * # Arguments
-     * * `id` - The ID of the user to check for existence.
-     *
-     * # Returns
-     * A new instance of `DoesUserExistByIdQueryView`.
-     */
     pub fn new(id: u64) -> Self {
         Self { id }
     }
 
-    /**
-     * Returns the ID of the user being checked.
-     *
-     * # Returns
-     * A reference to the user's ID.
-     */
     pub fn get_id(&self) -> u64 {
         self.id
     }
@@ -35,7 +17,6 @@ impl DoesUserExistByIdQueryView {
 
 impl DatabaseQueryView for DoesUserExistByIdQueryView {
     fn get_request(&self) -> String {
-        // On utilise $1 au lieu de '{}'
         "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1) AS does_user_exist".to_string()
     }
 }

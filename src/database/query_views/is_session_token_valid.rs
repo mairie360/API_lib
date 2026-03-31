@@ -2,9 +2,6 @@ use crate::database::db_interface::DatabaseQueryView;
 use std::fmt::Display;
 use std::net::IpAddr;
 
-/**
- * Query view to check if a user exists by their ID.
- */
 pub struct IsSessionTokenValidQueryView {
     user_id: u64,
     session_token: String,

@@ -1,28 +1,12 @@
 use mairie360_api_lib::jwt_manager::{
     check_jwt_validity, generate_jwt, get_jwt_secret, get_jwt_timeout, get_user_id_from_jwt,
 };
-use mairie360_api_lib::test_setup::queries_setup::setup_tests_full;
+use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
 use once_cell::sync::Lazy;
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::env;
-use std::sync::OnceLock;
-use testcontainers::{ContainerAsync, GenericImage};
-
-// On stocke le conteneur et l'URL pour qu'ils ne soient pas détruits
-static SHARED_DB: OnceLock<(ContainerAsync<GenericImage>, String)> = OnceLock::new();
-
-async fn get_shared_db() -> &'static (ContainerAsync<GenericImage>, String) {
-    if let Some(db) = SHARED_DB.get() {
-        return db;
-    }
-
-    // Premier appel : on initialise tout
-    let (setup, host) = setup_tests_full().await;
-    SHARED_DB.set((setup, host)).ok();
-    SHARED_DB.get().unwrap()
-}
 
 /**
  * This module contains tests for the JWT manager.

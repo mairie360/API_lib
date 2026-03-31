@@ -6,3 +6,6 @@ pub use does_user_exist_by_id::DoesUserExistByIdQueryView;
 
 mod is_session_token_valid;
 pub use is_session_token_valid::IsSessionTokenValidQueryView;
+
+mod has_access;
+pub use has_access::HasAccessQueryView;

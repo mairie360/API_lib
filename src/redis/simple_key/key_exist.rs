@@ -1,17 +1,6 @@
 use deadpool_redis::redis::AsyncCommands;
 use deadpool_redis::Connection;
 
-/**
- * Check if a key exists in Redis.
- *
- * # Arguments
- * * `conn` - A mutable reference to the Redis connection.
- * * `key` - The key to check for existence.
- *
- * # Returns
- * A `Result` that is `Ok(true)` if the key exists, `Ok(false)` if it does not,
- * or an `Err` if there was an error checking the key's existence.
- */
 pub async fn key_exist(conn: &mut Connection, key: &str) -> Result<bool, redis::RedisError> {
     conn.exists(key).await
 }

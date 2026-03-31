@@ -10,8 +10,8 @@ use mairie360_api_lib::database::query_views::{
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
-use testcontainers::{ContainerAsync, GenericImage};
 use std::net::IpAddr;
+use testcontainers::{ContainerAsync, GenericImage};
 
 use std::sync::OnceLock;
 
@@ -187,7 +187,7 @@ mod queries_tests {
 
         assert!(!result);
     }
-    
+
     #[tokio::test]
     #[serial]
     async fn test_is_session_invalid_archived_user() {

@@ -1,16 +1,16 @@
+use super::db_setup::start_postgres_container;
 use std::env;
 use testcontainers::{ContainerAsync, GenericImage};
 use tokio_postgres::{Client, NoTls};
-use super::db_setup::start_postgres_container;
 
 /// 1. Démarre le conteneur et expose le client SQL
 pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, String) {
     let (node, _) = start_postgres_container().await;
     let host = "127.0.0.1";
-    let port = 5432; 
+    let port = 5432;
 
     let postgres_url = format!("postgres://postgres:postgres@{}:{}/postgres", host, port);
-    
+
     env::set_var("DB_HOST", host);
     env::set_var("DB_PORT", port.to_string());
 
@@ -25,7 +25,10 @@ pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, St
     });
 
     // Nettoyage initial systématique
-    client.batch_execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE;").await.unwrap();
+    client
+        .batch_execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE;")
+        .await
+        .unwrap();
 
     (node, client, postgres_url)
 }
@@ -44,14 +47,19 @@ pub async fn setup_active_session(client: &Client) {
 /// 3. Setup pour tester un token expiré
 pub async fn setup_expired_session(client: &Client) {
     // Note : On utilise l'ID 1 supposant qu'Alice existe déjà ou on la crée si besoin
-    client.batch_execute("
+    client
+        .batch_execute(
+            "
         INSERT INTO sessions (user_id, user_is_archived, token_hash, ip_address, device_info)
         VALUES (1, FALSE, 'test_token_hash_expired', '127.0.0.1', 'Mozilla/5.0');
 
         UPDATE sessions 
         SET expires_at = now() - INTERVAL '1 hour' 
         WHERE token_hash = 'test_token_hash_expired';
-    ").await.expect("Failed to setup expired session");
+    ",
+        )
+        .await
+        .expect("Failed to setup expired session");
 }
 
 /// 4. Setup pour tester un utilisateur archivé

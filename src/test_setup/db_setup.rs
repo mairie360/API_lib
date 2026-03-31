@@ -1,7 +1,7 @@
 use std::env;
 use std::time::Duration;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, ImageExt, GenericImage};
+use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tokio_postgres::NoTls;
 
 static DB_VERSION: &str = "dev-b816587";
@@ -23,25 +23,29 @@ pub async fn run_migrations(_container: &ContainerAsync<GenericImage>) {
         .with_env_var("LIQUIBASE_SEARCH_PATH", "/migrations") // Comme dans ton Compose
         .with_cmd(vec![
             "update",
-            "--url", liquibase_url,
-            "--username", "postgres",
-            "--password", "postgres",
-            "--changelog-file", "changelog.xml", // Relatif à /migrations
+            "--url",
+            liquibase_url,
+            "--username",
+            "postgres",
+            "--password",
+            "postgres",
+            "--changelog-file",
+            "changelog.xml", // Relatif à /migrations
         ])
         .start()
         .await
         .expect("Failed to start Liquibase container");
-    
+
     while liquibase_node.is_running().await.unwrap() {
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    
+
     // Logs pour debug
     let stdout = liquibase_node.stdout_to_vec().await.unwrap_or_default();
     let stderr = liquibase_node.stderr_to_vec().await.unwrap_or_default();
     println!("STDOUT: {}", String::from_utf8_lossy(&stdout));
     eprintln!("STDERR: {}", String::from_utf8_lossy(&stderr));
-    
+
     println!("✅ Fin du container Liquibase.");
 }
 
@@ -57,17 +61,23 @@ pub async fn start_postgres_container() -> (ContainerAsync<GenericImage>, TestDb
         .expect("Failed to start Postgres");
 
     // En mode host, on tape directement sur 127.0.0.1:5432
-    let config = TestDbConfig { 
-        host: "127.0.0.1".to_string(), 
-        port: 5432 
+    let config = TestDbConfig {
+        host: "127.0.0.1".to_string(),
+        port: 5432,
     };
 
-    let connection_string = "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=postgres";
+    let connection_string =
+        "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=postgres";
 
     // Healthcheck
     let mut attempts = 0;
     while attempts < 15 {
-        if tokio_postgres::connect(connection_string, NoTls).await.is_ok() { break; }
+        if tokio_postgres::connect(connection_string, NoTls)
+            .await
+            .is_ok()
+        {
+            break;
+        }
         tokio::time::sleep(Duration::from_millis(300)).await;
         attempts += 1;
     }

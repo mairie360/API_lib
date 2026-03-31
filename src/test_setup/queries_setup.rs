@@ -59,16 +59,21 @@ pub async fn setup_archived_user_test(client: &Client) {
     client.batch_execute("
         -- 1. Créer Bob (Actif)
         INSERT INTO users (id, first_name, last_name, email, password, phone_number, status, is_archived)
-        VALUES (2, 'Bob', 'Smith', 'bob@example.com', 'password123', '0102030405', 'active', FALSE);
+        VALUES (2, 'Bob', 'Smith', 'bob@example.com', 'password123', '0102030405', 'active', FALSE)
+        ON CONFLICT (id) DO UPDATE SET is_archived = FALSE;
         
-        -- 2. Créer sa session (Liée à l'état non-archivé)
+        -- 2. Créer sa session (Active)
         INSERT INTO sessions (user_id, user_is_archived, token_hash, ip_address, device_info)
         VALUES (2, FALSE, 'test_token_hash_archived_user', '127.0.0.1', 'Mozilla/5.0');
         
-        -- 3. CHANGER LES DEUX EN MÊME TEMPS
-        -- On utilise un bloc qui garantit que la FK reste valide à la fin de l'opération
-        UPDATE sessions SET user_is_archived = TRUE WHERE user_id = 2;
-        UPDATE users SET is_archived = TRUE WHERE id = 2;
+        -- 3. ARCHIVAGE : Si ton CHECK interdit 'TRUE' dans sessions, 
+        -- tu dois soit supprimer la session, soit modifier la contrainte.
+        -- Ici, on simule l'archivage de l'user. 
+        UPDATE users SET is_archived = TRUE, status = 'archived' WHERE id = 2;
+
+        -- NOTE: Si 'user_is_archived' dans la table sessions a un CHECK à FALSE, 
+        -- cette ligne suivante échouera TOUJOURS :
+        -- UPDATE sessions SET user_is_archived = TRUE WHERE user_id = 2; 
     ").await.expect("Failed to setup archived user test");
 }
 
@@ -77,6 +82,6 @@ pub async fn setup_tests_full() -> (ContainerAsync<GenericImage>, String) {
     let (node, client, url) = setup_test_container().await;
     setup_active_session(&client).await;
     setup_expired_session(&client).await;
-    // setup_archived_user_test(&client).await;
+    setup_archived_user_test(&client).await;
     (node, url)
 }

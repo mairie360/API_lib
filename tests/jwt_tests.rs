@@ -7,6 +7,22 @@ use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::env;
+use std::sync::OnceLock;
+use testcontainers::{ContainerAsync, GenericImage};
+
+// On stocke le conteneur et l'URL pour qu'ils ne soient pas détruits
+static SHARED_DB: OnceLock<(ContainerAsync<GenericImage>, String)> = OnceLock::new();
+
+async fn get_shared_db() -> &'static (ContainerAsync<GenericImage>, String) {
+    if let Some(db) = SHARED_DB.get() {
+        return db;
+    }
+
+    // Premier appel : on initialise tout
+    let (setup, host) = setup_tests_full().await;
+    SHARED_DB.set((setup, host)).ok();
+    SHARED_DB.get().unwrap()
+}
 
 /**
  * This module contains tests for the JWT manager.
@@ -147,8 +163,8 @@ mod jwt_tests {
     #[serial]
     async fn test_jwt_check_valid() {
         setup();
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         let token = generate_jwt(USER_ID).unwrap();
         assert!(
             check_jwt_validity(&token, pool).await.is_ok(),
@@ -160,8 +176,8 @@ mod jwt_tests {
     #[serial]
     async fn test_jwt_check_empty_token() {
         setup();
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         assert_eq!(
             check_jwt_validity("", pool).await.unwrap_err(),
             JWTCheckError::NoTokenProvided,
@@ -173,8 +189,8 @@ mod jwt_tests {
     #[serial]
     async fn test_jwt_check_token_without_id() {
         setup();
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         let invalid_token = generate_jwt("").unwrap();
         assert_eq!(
             check_jwt_validity(&invalid_token, pool).await.unwrap_err(),
@@ -187,8 +203,8 @@ mod jwt_tests {
     #[serial]
     async fn test_jwt_check_invalid_user_id() {
         setup();
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         let invalid_token = generate_jwt("8").unwrap();
         assert_eq!(
             check_jwt_validity(&invalid_token, pool).await.unwrap_err(),

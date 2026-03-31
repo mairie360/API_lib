@@ -4,7 +4,7 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, ImageExt, GenericImage};
 use tokio_postgres::NoTls;
 
-static DB_VERSION: &str = "dev-a2d1176";
+static DB_VERSION: &str = "dev-b816587";
 
 pub struct TestDbConfig {
     pub host: String,
@@ -19,14 +19,14 @@ pub async fn run_migrations(_container: &ContainerAsync<GenericImage>) {
 
     let liquibase_node = GenericImage::new("ghcr.io/mairie360/liquibase-migrations", DB_VERSION)
         .with_network("host")
-        .with_working_dir("/liquibase/changelog") // On s'assure d'être au bon endroit
+        .with_working_dir("/migrations") // Correspond au WORKDIR de ton Dockerfile
+        .with_env_var("LIQUIBASE_SEARCH_PATH", "/migrations") // Comme dans ton Compose
         .with_cmd(vec![
-            "--search-path=/liquibase/changelog", // Argument global (AVANT update)
-            "update",                             // La commande
+            "update",
             "--url", liquibase_url,
             "--username", "postgres",
             "--password", "postgres",
-            "--changelog-file", "changelog.xml",
+            "--changelog-file", "changelog.xml", // Relatif à /migrations
         ])
         .start()
         .await

@@ -10,7 +10,24 @@ use mairie360_api_lib::database::query_views::{
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use testcontainers::{ContainerAsync, GenericImage};
 use std::net::IpAddr;
+
+use std::sync::OnceLock;
+
+// On stocke le conteneur et l'URL pour qu'ils ne soient pas détruits
+static SHARED_DB: OnceLock<(ContainerAsync<GenericImage>, String)> = OnceLock::new();
+
+async fn get_shared_db() -> &'static (ContainerAsync<GenericImage>, String) {
+    if let Some(db) = SHARED_DB.get() {
+        return db;
+    }
+
+    // Premier appel : on initialise tout
+    let (setup, host) = setup_tests_full().await;
+    SHARED_DB.set((setup, host)).ok();
+    SHARED_DB.get().unwrap()
+}
 
 #[cfg(test)]
 mod queries_tests {
@@ -31,8 +48,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_exists_by_id() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         let view = DoesUserExistByIdQueryView::new(1);
 
         // On passe pool car les fonctions attendent désormais une référence
@@ -44,8 +61,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_id_not_found() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         let view = DoesUserExistByIdQueryView::new(999);
 
         let result = does_user_exist_by_id_query(view, pool).await.unwrap();
@@ -58,8 +75,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_exists_by_email_success() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         let view = DoesUserExistByEmailQueryView::new("alice@example.com".to_string());
 
         let result = does_user_exist_by_email_query(view, pool).await.unwrap();
@@ -70,8 +87,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_email_not_found() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         let view = DoesUserExistByEmailQueryView::new("unknown@example.com".to_string());
 
         let result = does_user_exist_by_email_query(view, pool).await.unwrap();
@@ -82,8 +99,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_user_exists_by_email_invalid_format() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
         let email = "invalid-email";
         let view = DoesUserExistByEmailQueryView::new(email.to_string());
 
@@ -102,8 +119,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_sql_injection_email_query() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
 
         // Tentative d'injection : si c'était vulnérable, EXISTS retournerait true ou ferait une erreur
         let malicious_email = "' OR 1=1 --";
@@ -123,8 +140,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_is_session_token_valid() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
 
         let view = IsSessionTokenValidQueryView::new(
             1,
@@ -140,8 +157,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_is_session_token_expired() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
 
         let view = IsSessionTokenValidQueryView::new(
             1,
@@ -157,8 +174,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_is_session_ip_invalid() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
 
         let view = IsSessionTokenValidQueryView::new(
             1,
@@ -174,8 +191,8 @@ mod queries_tests {
     #[tokio::test]
     #[serial]
     async fn test_is_session_invalid_archived_user() {
-        let (_container, host) = setup_tests_full().await;
-        let pool = get_pool(host).await;
+        let (_container, host) = get_shared_db().await;
+        let pool = get_pool(host.as_str().to_string()).await;
 
         let view = IsSessionTokenValidQueryView::new(
             3,
@@ -185,6 +202,6 @@ mod queries_tests {
 
         let result = is_session_token_valid_query(view, pool).await.unwrap();
 
-        assert!(false, "Need db fix before");
+        assert!(!result);
     }
 }

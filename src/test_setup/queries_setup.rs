@@ -1,6 +1,7 @@
 use super::db_setup::start_postgres_container;
-use std::{env, sync::OnceLock};
+use std::env;
 use testcontainers::{ContainerAsync, GenericImage};
+use tokio::sync::OnceCell;
 use tokio_postgres::{Client, NoTls};
 
 /// 1. Démarre le conteneur et expose le client SQL
@@ -47,11 +48,13 @@ pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, St
     (node, client, postgres_url)
 }
 
+static _ALICE_ID: i32 = 1;
+
 /// 2. Setup pour un utilisateur valide avec une session active
 pub async fn setup_active_session(client: &Client) {
     client.batch_execute("
-        INSERT INTO users (id, first_name, last_name, email, password, phone_number, status, is_archived)
-        VALUES (1, 'Alice', 'Smith', 'alice@example.com', 'password123', '0102030405', 'active', FALSE);
+        INSERT INTO users (first_name, last_name, email, password, phone_number, status, is_archived)
+        VALUES ('Alice', 'Smith', 'alice@example.com', 'password123', '0102030405', 'active', FALSE);
 
         INSERT INTO sessions (user_id, user_is_archived, token_hash, ip_address, device_info)
         VALUES (1, FALSE, 'test_token_hash_unique_123', '127.0.0.1', 'Mozilla/5.0 (TestRunner)');
@@ -76,13 +79,14 @@ pub async fn setup_expired_session(client: &Client) {
         .expect("Failed to setup expired session");
 }
 
+static _BOB_ID: i32 = 1;
+
 /// 4. Setup pour tester un utilisateur archivé
 pub async fn setup_archived_user_test(client: &Client) {
     client.batch_execute("
         -- 1. Créer Bob (Actif)
-        INSERT INTO users (id, first_name, last_name, email, password, phone_number, status, is_archived)
-        VALUES (2, 'Bob', 'Smith', 'bob@example.com', 'password123', '0102030405', 'active', FALSE)
-        ON CONFLICT (id) DO UPDATE SET is_archived = FALSE;
+        INSERT INTO users (first_name, last_name, email, password, phone_number, status, is_archived)
+        VALUES ('Bob', 'Smith', 'bob@example.com', 'password123', '0102030405', 'active', FALSE);
 
         -- 2. Créer sa session (Active)
         INSERT INTO sessions (user_id, user_is_archived, token_hash, ip_address, device_info)
@@ -99,52 +103,51 @@ pub async fn setup_archived_user_test(client: &Client) {
     ").await.expect("Failed to setup archived user test");
 }
 
+static _ADMIN_ID: i32 = 3;
+
 /// 5. Setup des données d'accès contrôlé
 pub async fn setup_access_control_data(client: &Client) {
     client
         .batch_execute(
             "
         -- 0. CRÉATION DES UTILISATEURS MANQUANTS (IMPORTANT)
-        INSERT INTO users (id, first_name, last_name, email, password, status)
-        VALUES (400, 'Admin', 'User', 'admin@test.com', 'hash', 'active'),
-               (402, 'Bob', 'Guest', 'bob@test.com', 'hash', 'active')
-        ON CONFLICT (id) DO NOTHING;
+        INSERT INTO users (first_name, last_name, email, password, status)
+        VALUES ('Admin', 'User', 'admin@test.com', 'hash', 'active');
 
         -- 1. On s'assure que les ressources existent
-        INSERT INTO resources (id, name) VALUES (1, 'user'), (2, 'groups'), (3, 'document')
-        ON CONFLICT (id) DO NOTHING;
+        INSERT INTO resources (name) VALUES ('user'), ('groups'), ('document');
 
         -- 2. On s'assure que les permissions existent
-        INSERT INTO permissions (id, resource_id, action) VALUES
-        (1, 1, 'read_all'),
-        (2, 3, 'read_all'),
-        (3, 2, 'read')
-        ON CONFLICT (id) DO NOTHING;
+        INSERT INTO permissions (resource_id, action) VALUES
+        (1, 'read_all'),
+        (2, 'read_all'),
+        (3, 'read');
 
         -- 3. RBAC : Alice (1) est ADMIN
-        INSERT INTO roles (id, name) VALUES (1, 'Admin') ON CONFLICT (id) DO NOTHING;
-        INSERT INTO rights (role_id, permission_id) VALUES (1, 1), (1, 2) ON CONFLICT DO NOTHING;
-        INSERT INTO user_roles (user_id, role_id) VALUES (1, 1) ON CONFLICT DO NOTHING;
+        INSERT INTO roles (name) VALUES ('Admin');
+        INSERT INTO rights (role_id, permission_id) VALUES (1, 1), (1, 2);
+        INSERT INTO user_roles (user_id, role_id) VALUES (1, 1);
 
         -- 4. Ownership : Alice (1) possède le document 10
         -- On vérifie si la table existe (cas où Liquibase n'aurait pas encore fini)
         CREATE TABLE IF NOT EXISTS document (id SERIAL PRIMARY KEY, owner_id INT);
-        INSERT INTO document (id, owner_id) VALUES (10, 1)
-        ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id;
+        INSERT INTO document (owner_id) VALUES (1);
 
-        -- 5. ACL : Maintenant l'ID 400 existe, on peut créer le groupe
-        INSERT INTO groups (id, owner_id, name, owner_is_archived)
-        VALUES (50, 400, 'Seeded Group', false)
-        ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id;
+        -- 5. ACL : Maintenant l'ID 3 existe, on peut créer le groupe
+        INSERT INTO groups (owner_id, name, owner_is_archived)
+        VALUES (3, 'Seeded Group', false);
 
-        -- Bob (402) accède au groupe 50
+        -- Bob (2) accède au groupe 50
         INSERT INTO access_control (user_id, resource_id, permission_id, resource_instance_id)
-        VALUES (402, 2, 3, 50) ON CONFLICT (id) DO NOTHING;
+        VALUES (2, 2, 3, 50);
     ",
         )
         .await
         .expect("Failed to setup access control data");
 }
+
+// On stocke le conteneur et l'URL pour qu'ils ne soient pas détruits
+static SHARED_DB: OnceCell<(ContainerAsync<GenericImage>, String)> = OnceCell::const_new();
 
 /// 6. Fonction globale si tu veux tout lancer d'un coup (ton ancienne approche)
 async fn setup_tests_full() -> (ContainerAsync<GenericImage>, String) {
@@ -156,16 +159,12 @@ async fn setup_tests_full() -> (ContainerAsync<GenericImage>, String) {
     (node, url)
 }
 
-// On stocke le conteneur et l'URL pour qu'ils ne soient pas détruits
-static SHARED_DB: OnceLock<(ContainerAsync<GenericImage>, String)> = OnceLock::new();
-
 pub async fn get_shared_db() -> &'static (ContainerAsync<GenericImage>, String) {
-    if let Some(db) = SHARED_DB.get() {
-        return db;
-    }
+    SHARED_DB
+        .get_or_init(|| async {
+            println!("🚀 Initialisation unique de la DB de test...");
 
-    // Premier appel : on initialise tout
-    let (setup, host) = setup_tests_full().await;
-    SHARED_DB.set((setup, host)).ok();
-    SHARED_DB.get().unwrap()
+            setup_tests_full().await
+        })
+        .await
 }

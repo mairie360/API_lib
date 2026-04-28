@@ -48,7 +48,7 @@ pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, St
     (node, client, postgres_url)
 }
 
-static _ALICE_ID: i32 = 1;
+pub static ALICE_ID: u64 = 1;
 
 /// 2. Setup pour un utilisateur valide avec une session active
 pub async fn setup_active_session(client: &Client) {
@@ -79,7 +79,7 @@ pub async fn setup_expired_session(client: &Client) {
         .expect("Failed to setup expired session");
 }
 
-static _BOB_ID: i32 = 1;
+pub static BOB_ID: u64 = 1;
 
 /// 4. Setup pour tester un utilisateur archivé
 pub async fn setup_archived_user_test(client: &Client) {
@@ -103,7 +103,7 @@ pub async fn setup_archived_user_test(client: &Client) {
     ").await.expect("Failed to setup archived user test");
 }
 
-static _ADMIN_ID: i32 = 3;
+pub static ADMIN_ID: u64 = 3;
 
 /// 5. Setup des données d'accès contrôlé
 pub async fn setup_access_control_data(client: &Client) {

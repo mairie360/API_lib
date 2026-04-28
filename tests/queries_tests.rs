@@ -138,7 +138,7 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                1,
+                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -155,7 +155,7 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                1,
+                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
                 "test_token_hash_expired".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -172,7 +172,7 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                1,
+                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 2]),
             );
@@ -189,7 +189,7 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                3,
+                mairie360_api_lib::test_setup::queries_setup::ADMIN_ID,
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -211,7 +211,12 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             // Alice (ID 1) est admin, elle a 'read_all' sur 'document'
-            let view = HasAccessQueryView::new(1, "document", "read", 10);
+            let view = HasAccessQueryView::new(
+                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                "document",
+                "read",
+                1,
+            );
 
             let result = has_access_query(view, pool.clone()).await.unwrap();
 
@@ -224,7 +229,12 @@ mod queries_tests {
             let (_container, host) = get_shared_db().await;
             let pool = get_pool(host.as_str().to_string()).await;
 
-            let view = HasAccessQueryView::new(1, "document", "read", 10);
+            let view = HasAccessQueryView::new(
+                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                "document",
+                "read",
+                1,
+            );
 
             let result = has_access_query(view, pool.clone()).await.unwrap();
 
@@ -237,7 +247,12 @@ mod queries_tests {
             let (_container, host) = get_shared_db().await;
             let pool = get_pool(host.as_str().to_string()).await;
 
-            let view = HasAccessQueryView::new(2, "groups", "read", 50);
+            let view = HasAccessQueryView::new(
+                mairie360_api_lib::test_setup::queries_setup::BOB_ID,
+                "groups",
+                "read",
+                50,
+            );
 
             let result = has_access_query(view, pool).await.unwrap();
 
@@ -253,7 +268,12 @@ mod queries_tests {
             let (_container, host) = get_shared_db().await;
             let pool = get_pool(host.as_str().to_string()).await;
 
-            let view = HasAccessQueryView::new(1, "document", "read", 1);
+            let view = HasAccessQueryView::new(
+                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                "document",
+                "read",
+                10,
+            );
 
             let result = has_access_query(view, pool.clone()).await.unwrap();
 
@@ -266,7 +286,12 @@ mod queries_tests {
             let (_container, host) = get_shared_db().await;
             let pool = get_pool(host.as_str().to_string()).await;
 
-            let view = HasAccessQueryView::new(1, "ghost_resource", "read", 0);
+            let view = HasAccessQueryView::new(
+                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                "ghost_resource",
+                "read",
+                0,
+            );
 
             let result = has_access_query(view, pool.clone()).await.unwrap();
 

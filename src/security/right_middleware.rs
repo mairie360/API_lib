@@ -63,13 +63,14 @@ pub async fn access_guard_middleware(
 
     // On exécute la requête SQL que tu as écrite
     let is_allowed = sqlx::query_scalar::<_, bool>("SELECT check_access($1, $2, $3, $4)")
-        .bind(user.id as i64)
+        .bind(user.id as i32)
         .bind(config.resource_name)
         .bind(config.action)
         .bind(instance_id)
         .fetch_one(&db_pool)
         .await
-        .map_err(|_| {
+        .map_err(|e| {
+            eprintln!("{:?}", e);
             actix_web::error::ErrorInternalServerError("Database error during access check")
         })?;
 

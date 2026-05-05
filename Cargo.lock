@@ -1972,6 +1972,7 @@ dependencies = [
  "async-trait",
  "axum",
  "deadpool-redis",
+ "futures-util",
  "jsonwebtoken",
  "once_cell",
  "postgres",

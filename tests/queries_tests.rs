@@ -138,7 +138,9 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                    .get()
+                    .unwrap() as u64,
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -155,7 +157,9 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                *mairie360_api_lib::test_setup::queries_setup::BOB_ID
+                    .get()
+                    .unwrap() as u64,
                 "test_token_hash_expired".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -172,7 +176,9 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                    .get()
+                    .unwrap() as u64,
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 2]),
             );
@@ -189,7 +195,9 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::ADMIN_ID,
+                *mairie360_api_lib::test_setup::queries_setup::ADMIN_ID
+                    .get()
+                    .unwrap() as u64,
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -212,7 +220,9 @@ mod queries_tests {
 
             // Alice (ID 1) est admin, elle a 'read_all' sur 'document'
             let view = HasAccessQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                    .get()
+                    .unwrap() as u64,
                 "document",
                 "read",
                 1,
@@ -230,7 +240,9 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = HasAccessQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                    .get()
+                    .unwrap() as u64,
                 "document",
                 "read",
                 1,
@@ -247,18 +259,17 @@ mod queries_tests {
             let (_container, host) = get_shared_db().await;
             let pool = get_pool(host.as_str().to_string()).await;
 
-            let view = HasAccessQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::BOB_ID,
-                "groups",
-                "read",
-                50,
-            );
+            let alice_id = *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                .get()
+                .unwrap();
+
+            let view = HasAccessQueryView::new(alice_id as u64, "groups", "read", 50);
 
             let result = has_access_query(view, pool).await.unwrap();
 
             assert!(
                 result,
-                "Guest (2) should have individual ACL access to group 50"
+                "Guest (3) should have individual ACL access to group 50"
             );
         }
 
@@ -269,7 +280,9 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = HasAccessQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                *mairie360_api_lib::test_setup::queries_setup::BOB_ID
+                    .get()
+                    .unwrap() as u64,
                 "document",
                 "read",
                 10,
@@ -287,7 +300,9 @@ mod queries_tests {
             let pool = get_pool(host.as_str().to_string()).await;
 
             let view = HasAccessQueryView::new(
-                mairie360_api_lib::test_setup::queries_setup::ALICE_ID,
+                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                    .get()
+                    .unwrap() as u64,
                 "ghost_resource",
                 "read",
                 0,

@@ -47,7 +47,7 @@ pub async fn access_guard_middleware(
         }
     }
 
-    // 4. Appel à ta fonction DB
+    // 4. Appel à la base de données
     let app_state = req
         .app_data::<actix_web::web::Data<AppState>>()
         .ok_or_else(|| actix_web::error::ErrorInternalServerError("AppState missing"))?;
@@ -61,8 +61,8 @@ pub async fn access_guard_middleware(
         }
     };
 
-    // On exécute la requête SQL que tu as écrite
-    let is_allowed = sqlx::query_scalar::<_, bool>("SELECT check_access($1, $2, $3, $4)")
+    // Mise à jour ici : On récupère un i32 au lieu d'un bool
+    let access_status = sqlx::query_scalar::<_, i32>("SELECT check_access($1, $2, $3, $4)")
         .bind(user.id as i32)
         .bind(config.resource_name)
         .bind(config.action)
@@ -70,16 +70,23 @@ pub async fn access_guard_middleware(
         .fetch_one(&db_pool)
         .await
         .map_err(|e| {
-            eprintln!("{:?}", e);
+            eprintln!("Access check SQL error: {:?}", e);
             actix_web::error::ErrorInternalServerError("Database error during access check")
         })?;
 
-    // 5. Verdict
-    if is_allowed {
-        next.call(req).await
-    } else {
-        // Optionnel : Tu pourrais log ici en Rust aussi,
-        // mais ta fonction SQL s'en occupe déjà !
-        Err(actix_web::error::ErrorForbidden("Insufficient permissions"))
+    // 5. Verdict étendu selon le code retourné par la DB
+    match access_status {
+        1 => {
+            // Accès accordé, on passe au handler ou middleware suivant
+            next.call(req).await
+        }
+        -1 => {
+            // La ressource ou la table n'existe pas -> 404 Not Found propre
+            Err(actix_web::error::ErrorNotFound("Resource not found"))
+        }
+        _ => {
+            // Pas de droits (0) ou toute autre valeur -> 403 Forbidden standard
+            Err(actix_web::error::ErrorForbidden("Insufficient permissions"))
+        }
     }
 }

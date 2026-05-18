@@ -5,8 +5,8 @@ use sqlx::PgPool;
 pub async fn has_access_query(
     view: HasAccessQueryView,
     pool: PgPool,
-) -> Result<bool, DatabaseError> {
-    let result = sqlx::query_scalar::<_, bool>(&view.get_request())
+) -> Result<i32, DatabaseError> {
+    let result = sqlx::query_scalar::<_, i32>(&view.get_request())
         .bind(view.get_user_id() as i32)
         .bind(view.get_resource_name())
         .bind(view.get_action())

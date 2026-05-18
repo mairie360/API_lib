@@ -230,7 +230,7 @@ mod queries_tests {
 
             let result = has_access_query(view, pool.clone()).await.unwrap();
 
-            assert!(result);
+            assert!(result == 1, "expected access granted, got {}", result);
         }
 
         #[tokio::test]
@@ -250,7 +250,7 @@ mod queries_tests {
 
             let result = has_access_query(view, pool.clone()).await.unwrap();
 
-            assert!(result);
+            assert!(result == 1, "expected access granted, got {}", result);
         }
 
         #[tokio::test]
@@ -263,13 +263,55 @@ mod queries_tests {
                 .get()
                 .unwrap();
 
-            let view = HasAccessQueryView::new(alice_id as u64, "groups", "read", 50);
+            // 1. Assurer l'existence de la ressource 'groups' dans la table 'resources'
+            sqlx::query("INSERT INTO public.resources (name) VALUES ('groups') ON CONFLICT (name) DO NOTHING")
+                .execute(&pool)
+                .await
+                .unwrap();
 
+            // 2. Assurer l'existence d'une permission 'read' sur 'groups'
+            sqlx::query(
+                "INSERT INTO public.permissions (resource_id, action) \
+                VALUES ((SELECT id FROM public.resources WHERE name = 'groups'), 'read') \
+                ON CONFLICT DO NOTHING",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            // 3. FIXÉ : Insérer le groupe 50 pour passer la validation de l'Étape 0 (Existence)
+            // On utilise alice_id (ou un ID valide existant) comme owner_id
+            sqlx::query(
+                "INSERT INTO public.groups (id, owner_id, owner_is_archived, name) \
+                VALUES (50, $1, false, 'Test ACL Group') \
+                ON CONFLICT (id) DO NOTHING",
+            )
+            .bind(alice_id as i32)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+            // 4. Lier l'ACL individuelle pour Alice sur l'instance 50
+            sqlx::query(
+                "INSERT INTO public.access_control (user_id, resource_id, resource_instance_id, permission_id) \
+                VALUES ($1, (SELECT id FROM public.resources WHERE name = 'groups'), 50, \
+                (SELECT id FROM public.permissions WHERE action = 'read' AND resource_id = (SELECT id FROM public.resources WHERE name = 'groups') LIMIT 1)) \
+                ON CONFLICT DO NOTHING"
+            )
+                .bind(alice_id as i32)
+                .execute(&pool)
+                .await
+                .unwrap();
+
+            // 5. Exécution du test
+            let view = HasAccessQueryView::new(alice_id as u64, "groups", "read", 50);
             let result = has_access_query(view, pool).await.unwrap();
 
             assert!(
-                result,
-                "Guest (3) should have individual ACL access to group 50"
+                result == 1,
+                "Alice ({}) should have individual ACL access to group 50, got {}",
+                alice_id,
+                result
             );
         }
 
@@ -279,18 +321,41 @@ mod queries_tests {
             let (_container, host) = get_shared_db().await;
             let pool = get_pool(host.as_str().to_string()).await;
 
+            let alice_id = *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                .get()
+                .unwrap();
+
+            // 1. Assurer l'existence de la ressource 'groups' dans la table 'resources'
+            sqlx::query("INSERT INTO public.resources (name) VALUES ('groups') ON CONFLICT (name) DO NOTHING")
+                        .execute(&pool)
+                        .await
+                        .unwrap();
+
+            // 2. FIXÉ : Insérer le groupe 10 possédé par Alice pour passer la validation de l'Étape 0 (Existence).
+            // Comme le test utilise l'ID de Bob juste après, Bob ne sera ni propriétaire, ni bénéficiaire d'ACL
+            // direct ou par groupe, provoquant ainsi un refus d'accès binaire (0) au lieu d'une erreur d'existence (-1).
+            sqlx::query(
+                "INSERT INTO public.groups (id, owner_id, owner_is_archived, name) \
+                         VALUES (10, $1, false, 'Confidential Group') \
+                         ON CONFLICT (id) DO NOTHING",
+            )
+            .bind(alice_id as i32)
+            .execute(&pool)
+            .await
+            .unwrap();
+
             let view = HasAccessQueryView::new(
                 *mairie360_api_lib::test_setup::queries_setup::BOB_ID
                     .get()
                     .unwrap() as u64,
-                "document",
+                "groups",
                 "read",
                 10,
             );
 
             let result = has_access_query(view, pool.clone()).await.unwrap();
 
-            assert!(!result);
+            assert!(result == 0, "expected access denied, got {}", result);
         }
 
         #[tokio::test]
@@ -310,7 +375,7 @@ mod queries_tests {
 
             let result = has_access_query(view, pool.clone()).await.unwrap();
 
-            assert!(!result);
+            assert!(result == -1, "expected access denied, got {}", result);
         }
     }
 

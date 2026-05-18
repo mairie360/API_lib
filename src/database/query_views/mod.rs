@@ -9,3 +9,6 @@ pub use is_session_token_valid::IsSessionTokenValidQueryView;
 
 mod has_access;
 pub use has_access::HasAccessQueryView;
+
+mod is_admin;
+pub use is_admin::IsAdminQueryView;

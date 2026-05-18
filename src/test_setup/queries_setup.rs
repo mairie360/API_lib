@@ -121,6 +121,13 @@ pub async fn setup_access_control_data(client: &Client) {
         .await
         .expect("Failed to insert Admin");
     let admin_id: i32 = admin_row.get(0);
+
+    client
+        .batch_execute(&format!(
+            "INSERT INTO user_roles (user_id, role_id) VALUES ({admin_id}, 1) ON CONFLICT DO NOTHING;"
+        ))
+        .await
+        .expect("Failed to insert User Role");
     ADMIN_ID.set(admin_id).ok();
 
     // Group Owner avec ON CONFLICT

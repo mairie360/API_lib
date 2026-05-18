@@ -12,3 +12,6 @@ pub use is_session_token_valid::is_session_token_valid_query;
 
 mod has_access;
 pub use has_access::has_access_query;
+
+mod is_admin;
+pub use is_admin::is_admin_query;

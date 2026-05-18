@@ -313,4 +313,45 @@ mod queries_tests {
             assert!(!result);
         }
     }
+
+    #[cfg(test)]
+    mod is_admin_tests {
+        use mairie360_api_lib::database::{queries::is_admin_query, query_views::IsAdminQueryView};
+
+        use super::*;
+
+        #[tokio::test]
+        #[serial]
+        async fn test_is_admin_true() {
+            let (_container, host) = get_shared_db().await;
+            let pool = get_pool(host.as_str().to_string()).await;
+
+            let view = IsAdminQueryView::new(
+                *mairie360_api_lib::test_setup::queries_setup::ADMIN_ID
+                    .get()
+                    .unwrap() as u64,
+            );
+
+            let result = is_admin_query(view, pool).await.unwrap();
+
+            assert!(result, "Expected admin to be admin");
+        }
+
+        #[tokio::test]
+        #[serial]
+        async fn test_is_admin_false() {
+            let (_container, host) = get_shared_db().await;
+            let pool = get_pool(host.as_str().to_string()).await;
+
+            let view = IsAdminQueryView::new(
+                *mairie360_api_lib::test_setup::queries_setup::BOB_ID
+                    .get()
+                    .unwrap() as u64,
+            );
+
+            let result = is_admin_query(view, pool).await.unwrap();
+
+            assert!(!result, "Expected non-admin to not be admin");
+        }
+    }
 }

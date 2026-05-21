@@ -103,7 +103,6 @@ where
             let jwt = match jwt_option {
                 Some(token) => token,
                 None => {
-                    eprint!("no jwt");
                     let response = HttpResponse::Unauthorized()
                         .body("Unauthorized: No JWT token provided.")
                         .map_into_right_body();
@@ -131,7 +130,6 @@ where
                     }
                 }
                 Err(error) => {
-                    eprint!("error no jwt");
                     let response =
                         match error {
                             JWTCheckError::DatabaseError => HttpResponse::InternalServerError()

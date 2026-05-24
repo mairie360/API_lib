@@ -4,7 +4,7 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tokio_postgres::NoTls;
 
-static DB_VERSION: &str = "dev-e9990d6";
+static DB_VERSION: &str = "dev-44a6f2e";
 
 pub struct TestDbConfig {
     pub host: String,

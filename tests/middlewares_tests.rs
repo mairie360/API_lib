@@ -335,3 +335,79 @@ mod access_middleware {
         assert!(resp.status() == StatusCode::OK || resp.status() == StatusCode::FORBIDDEN);
     }
 }
+
+mod admin_path_tests {
+    use super::*;
+    use actix_web::{http::StatusCode, test, web, App, HttpResponse};
+    use mairie360_api_lib::jwt_manager::generate_jwt;
+    use mairie360_api_lib::security::AdminMiddleware;
+
+    // Handler de test pour valider que le middleware a laissé passer la requête
+    async fn fake_handler() -> HttpResponse {
+        HttpResponse::Ok().body("Granted")
+    }
+
+    #[actix_web::test]
+    async fn test_admin_path() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+
+        let app = test::init_service(
+            App::new().app_data(app_state.clone()).service(
+                web::scope("/api/v1/admin")
+                    .wrap(AdminMiddleware)
+                    .route("/all-users", web::get().to(fake_handler)),
+            ),
+        )
+        .await;
+
+        let token = generate_jwt("1").unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/admin/all-users")
+            .insert_header(("Authorization", format!("Bearer {}", token)))
+            .to_request();
+
+        // On simule un utilisateur (ID 1)
+
+        let resp = test::call_service(&app, req).await;
+
+        // Le test passe si le statut est OK ou FORBIDDEN (Alice peut être admin ou non)
+        assert!(resp.status() == StatusCode::OK);
+    }
+
+    #[actix_web::test]
+    async fn test_admin_path_forbidden() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+
+        let app = test::init_service(
+            App::new().app_data(app_state.clone()).service(
+                web::scope("/api/v1/admin")
+                    .wrap(AdminMiddleware)
+                    .route("/all-users", web::get().to(fake_handler)),
+            ),
+        )
+        .await;
+
+        let token = generate_jwt("Z").unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/admin/all-users")
+            .insert_header(("Authorization", format!("Bearer {}", token)))
+            .to_request();
+
+        // On simule un utilisateur (ID 1)
+
+        let resp = test::call_service(&app, req).await;
+
+        // Le test passe si le statut est OK ou FORBIDDEN (Alice peut être admin ou non)
+        assert!(
+            resp.status() == StatusCode::UNAUTHORIZED,
+            "expected UNAUTHORIZED, got {}",
+            resp.status()
+        );
+    }
+}

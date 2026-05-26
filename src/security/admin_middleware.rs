@@ -7,13 +7,14 @@ use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use std::rc::Rc;
 
+use crate::security::AuthenticatedUser;
 use crate::{database::queries::is_admin_query, pool::AppState};
 use crate::{
     database::query_views::IsAdminQueryView,
     jwt_manager::{check_jwt_validity, get_jwt_from_request, get_user_id_from_jwt, JWTCheckError},
 };
-
-use crate::security::AuthenticatedUser;
+use lazy_static::lazy_static;
+use regex::Regex;
 
 /**
  * Middleware to check the validity of JWT tokens in incoming requests.
@@ -79,7 +80,13 @@ where
         };
 
         let path = req.path();
-        if !path.starts_with("/admin") {
+        lazy_static! {
+            // Cette regex cherche un chemin qui contient ou commence par /api/v[chiffre]/admin
+            static ref ADMIN_PATH_REGEX: Regex = Regex::new(r"/api/v\d+/admin").unwrap();
+        }
+
+        // Si le chemin NE correspond PAS au pattern admin, on passe au service suivant
+        if !ADMIN_PATH_REGEX.is_match(path) {
             return Box::pin(async move {
                 let res = svc.call(req).await?;
                 Ok(res.map_into_left_body())

@@ -48,8 +48,8 @@ pub async fn setup_active_session(client: &Client) {
     client
         .execute(
             "
-        INSERT INTO sessions (user_id, user_is_archived, token_hash, ip_address, device_info)
-        VALUES ($1, FALSE, 'test_token_hash_unique_123', '127.0.0.1', 'Mozilla/5.0 (TestRunner)')
+        INSERT INTO sessions (user_id, token_hash, ip_address, device_info)
+        VALUES ($1, 'test_token_hash_unique_123', '127.0.0.1', 'Mozilla/5.0 (TestRunner)')
         ON CONFLICT DO NOTHING;
     ",
             &[&id],
@@ -63,8 +63,8 @@ pub async fn setup_expired_session(client: &Client) {
     let id = *ALICE_ID.get().expect("Alice ID not initialized");
 
     client.execute("
-        INSERT INTO sessions (user_id, user_is_archived, token_hash, ip_address, device_info, expires_at)
-        VALUES ($1, FALSE, 'test_token_hash_expired', '127.0.0.1', 'Mozilla/5.0', now() - INTERVAL '1 hour');
+        INSERT INTO sessions (user_id, token_hash, ip_address, device_info, expires_at)
+        VALUES ($1, 'test_token_hash_expired', '127.0.0.1', 'Mozilla/5.0', now() - INTERVAL '1 hour');
     ", &[&id]).await.expect("Failed to setup expired session");
 }
 
@@ -84,8 +84,8 @@ pub async fn setup_archived_user_test(client: &Client) {
     client
         .execute(
             "
-        INSERT INTO sessions (user_id, user_is_archived, token_hash, ip_address, device_info)
-        VALUES ($1, FALSE, 'test_token_hash_archived_user', '127.0.0.1', 'Mozilla/5.0')
+        INSERT INTO sessions (user_id, token_hash, ip_address, device_info)
+        VALUES ($1, 'test_token_hash_archived_user', '127.0.0.1', 'Mozilla/5.0')
         ON CONFLICT DO NOTHING;
     ",
             &[&id],
@@ -156,8 +156,8 @@ pub async fn setup_access_control_data(client: &Client) {
         CREATE TABLE IF NOT EXISTS document (id SERIAL PRIMARY KEY, owner_id INT);
         INSERT INTO document (owner_id) VALUES ({alice_id});
 
-        INSERT INTO groups (owner_id, name, owner_is_archived)
-        VALUES ({owner_id}, 'Seeded Group', false) ON CONFLICT DO NOTHING;
+        INSERT INTO groups (owner_id, name)
+        VALUES ({owner_id}, 'Seeded Group') ON CONFLICT DO NOTHING;
 
         INSERT INTO access_control (user_id, resource_id, permission_id, resource_instance_id)
         VALUES ({bob_id}, 2, 3, 50) ON CONFLICT DO NOTHING;

@@ -282,8 +282,8 @@ mod queries_tests {
             // 3. FIXÉ : Insérer le groupe 50 pour passer la validation de l'Étape 0 (Existence)
             // On utilise alice_id (ou un ID valide existant) comme owner_id
             sqlx::query(
-                "INSERT INTO public.groups (id, owner_id, owner_is_archived, name) \
-                VALUES (50, $1, false, 'Test ACL Group') \
+                "INSERT INTO public.groups (id, owner_id, name) \
+                VALUES (50, $1, 'Test ACL Group') \
                 ON CONFLICT (id) DO NOTHING",
             )
             .bind(alice_id as i32)
@@ -335,8 +335,8 @@ mod queries_tests {
             // Comme le test utilise l'ID de Bob juste après, Bob ne sera ni propriétaire, ni bénéficiaire d'ACL
             // direct ou par groupe, provoquant ainsi un refus d'accès binaire (0) au lieu d'une erreur d'existence (-1).
             sqlx::query(
-                "INSERT INTO public.groups (id, owner_id, owner_is_archived, name) \
-                         VALUES (10, $1, false, 'Confidential Group') \
+                "INSERT INTO public.groups (id, owner_id, name) \
+                         VALUES (10, $1, 'Confidential Group') \
                          ON CONFLICT (id) DO NOTHING",
             )
             .bind(alice_id as i32)

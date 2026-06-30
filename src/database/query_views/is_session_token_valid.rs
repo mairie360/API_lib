@@ -35,7 +35,6 @@ impl DatabaseQueryView for IsSessionTokenValidQueryView {
                 AND token_hash = $2
                 AND ip_address = $3::inet
                 AND is_active = true
-                AND user_is_archived = false
             ) AS is_valid"
             .to_string()
     }

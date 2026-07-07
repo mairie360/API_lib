@@ -6,6 +6,10 @@ edition = "2021"
 description = "Lib for mairie360 APIs"
 license = "MIT"
 repository = "https://github.com/mairie360/API_lib"
+exclude = [
+    "cicd-repo/**",
+    ".github/**"
+]
 
 [dependencies]
 actix-web = "4"

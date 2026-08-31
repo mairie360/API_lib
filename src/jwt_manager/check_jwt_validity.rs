@@ -1,8 +1,8 @@
-use crate::database::db_interface::Database;
 use crate::database::query_views::DoesUserExistByIdQueryView;
 use crate::jwt_manager::get_timeout_from_jwt;
 use crate::jwt_manager::get_user_id_from_jwt;
 use crate::jwt_manager::verify_jwt_timeout;
+use crate::smart_db::SmartDatabase;
 
 #[derive(Debug, PartialEq)]
 pub enum JWTCheckError {
@@ -13,7 +13,10 @@ pub enum JWTCheckError {
     UnknownUser,
 }
 
-pub async fn check_jwt_validity(jwt: &str, db_interface: &Database) -> Result<(), JWTCheckError> {
+pub async fn check_jwt_validity(
+    jwt: &str,
+    db_interface: &SmartDatabase,
+) -> Result<(), JWTCheckError> {
     if jwt.is_empty() {
         eprintln!("No JWT token provided.");
         return Err(JWTCheckError::NoTokenProvided);

@@ -40,7 +40,10 @@ fn setup() {
 #[cfg(test)]
 mod jwt_tests {
     use super::*;
-    use mairie360_api_lib::{database::db_interface::Database, jwt_manager::JWTCheckError};
+    use mairie360_api_lib::{
+        database::db_interface::Database, jwt_manager::JWTCheckError,
+        redis::redis_interface::Redis, smart_db::SmartDatabase,
+    };
 
     /**
      * Tests the retrieval of the JWT secret.
@@ -136,7 +139,9 @@ mod jwt_tests {
     async fn test_jwt_check_valid() {
         setup();
         let (_container, host) = get_shared_db().await;
-        let interface: Database = Database::new(host.as_str()).await;
+        let db_interface: Database = Database::new(host.as_str()).await;
+        let redis: Redis = Redis::new("");
+        let interface: SmartDatabase = SmartDatabase::new(db_interface, redis);
         let token = generate_jwt(USER_ID).unwrap();
         assert!(
             check_jwt_validity(&token, &interface).await.is_ok(),
@@ -149,7 +154,9 @@ mod jwt_tests {
     async fn test_jwt_check_empty_token() {
         setup();
         let (_container, host) = get_shared_db().await;
-        let interface: Database = Database::new(host.as_str()).await;
+        let db_interface: Database = Database::new(host.as_str()).await;
+        let redis: Redis = Redis::new("");
+        let interface: SmartDatabase = SmartDatabase::new(db_interface, redis);
         assert_eq!(
             check_jwt_validity("", &interface).await.unwrap_err(),
             JWTCheckError::NoTokenProvided,
@@ -162,7 +169,9 @@ mod jwt_tests {
     async fn test_jwt_check_token_without_id() {
         setup();
         let (_container, host) = get_shared_db().await;
-        let interface: Database = Database::new(host.as_str()).await;
+        let db_interface: Database = Database::new(host.as_str()).await;
+        let redis: Redis = Redis::new("");
+        let interface: SmartDatabase = SmartDatabase::new(db_interface, redis);
         let invalid_token = generate_jwt("").unwrap();
         assert_eq!(
             check_jwt_validity(&invalid_token, &interface)
@@ -178,7 +187,9 @@ mod jwt_tests {
     async fn test_jwt_check_invalid_user_id() {
         setup();
         let (_container, host) = get_shared_db().await;
-        let interface: Database = Database::new(host.as_str()).await;
+        let db_interface: Database = Database::new(host.as_str()).await;
+        let redis: Redis = Redis::new("");
+        let interface: SmartDatabase = SmartDatabase::new(db_interface, redis);
         let invalid_token = generate_jwt("8").unwrap();
         assert_eq!(
             check_jwt_validity(&invalid_token, &interface)

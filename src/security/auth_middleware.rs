@@ -88,7 +88,7 @@ where
         }
 
         Box::pin(async move {
-            let db_interface = app_state.get_db_interface();
+            let db_interface = app_state.get_smart_db();
 
             let jwt_option = get_jwt_from_request(req.request());
 

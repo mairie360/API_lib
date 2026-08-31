@@ -1,8 +1,9 @@
-use crate::{database::db_interface::Database, redis::redis_interface::Redis};
+use crate::{
+    database::db_interface::Database, redis::redis_interface::Redis, smart_db::SmartDatabase,
+};
 
 pub struct AppState {
-    redis_interface: Redis,
-    db_interface: Database,
+    smart_db: SmartDatabase,
 }
 
 impl AppState {
@@ -13,20 +14,15 @@ impl AppState {
         // --- Initialisation PostgreSQL ---
         let db_interface = Database::new(&pg_url).await;
 
-        eprintln!("redis status: {:?}", redis_interface.is_connected().await);
-        eprintln!("pg status: {:?}", db_interface.is_connected().await);
+        println!("redis status: {:?}", redis_interface.is_connected().await);
+        println!("pg status: {:?}", db_interface.is_connected().await);
 
-        Self {
-            redis_interface,
-            db_interface,
-        }
+        let smart_db = SmartDatabase::new(db_interface, redis_interface);
+
+        Self { smart_db }
     }
 
-    pub async fn get_redis_conn(&self) -> &Redis {
-        &self.redis_interface
-    }
-
-    pub fn get_db_interface(&self) -> &Database {
-        &self.db_interface
+    pub fn get_smart_db(&self) -> &SmartDatabase {
+        &self.smart_db
     }
 }

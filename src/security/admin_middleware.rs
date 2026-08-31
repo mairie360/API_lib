@@ -83,7 +83,7 @@ where
 
         Box::pin(async move {
             // Vérification de l'AppState
-            let db_interface = app_state.get_db_interface();
+            let db_interface = app_state.get_smart_db();
 
             lazy_static! {
                 static ref ADMIN_PATH_REGEX: Regex = Regex::new(r"/api/v\d+/admin").unwrap();

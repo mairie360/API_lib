@@ -91,7 +91,7 @@ impl QueryParam {
 pub trait ApiRequestDto: DeserializeOwned {
     fn query_sql(&self) -> &'static str;
     fn query_params(&self) -> &[QueryParam];
-    fn cache_key(&self) -> Option<&str> {
+    fn cache_key(&self) -> Option<String> {
         None
     }
 }

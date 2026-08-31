@@ -1,1 +1,2 @@
-pub mod smart_db;
+mod smart_db;
+pub use smart_db::SmartDatabase;

@@ -12,6 +12,11 @@ pub struct SmartDatabase {
 }
 
 impl SmartDatabase {
+    /// Constructeur pour initialiser le SmartDatabase avec tes deux interfaces
+    pub fn new(db: Database, redis: Redis) -> Self {
+        Self { db, redis }
+    }
+
     pub async fn execute<Q>(&self, query: Q) -> Result<(), Box<dyn std::error::Error>>
     where
         Q: ApiRequestDto,
@@ -21,7 +26,7 @@ impl SmartDatabase {
 
         // 2. Si la vue déclare une clé de cache, on l'invalide systématiquement
         if let Some(ref key) = query.cache_key() {
-            let _ = self.redis.secure_delete(key).await; //[cite: 3]
+            let _ = self.redis.secure_delete(key).await;
         }
 
         Ok(())
@@ -42,10 +47,10 @@ impl SmartDatabase {
             }
         }
 
-        // 2. Sinon, on tape dans PostgreSQL[cite: 1]
+        // 2. Sinon, on tape dans PostgreSQL
         let value: T = self.db.fetch_one(query).await?;
 
-        // 3. On remplit le cache si nécessaire[cite: 3]
+        // 3. On remplit le cache si nécessaire
         if let Some(ref key) = cache_key {
             if let Ok(json_str) = serde_json::to_string(&value) {
                 let _ = self.redis.secure_set(key, json_str).await;

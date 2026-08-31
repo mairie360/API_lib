@@ -151,3 +151,56 @@ mod safe_redis_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod redis_ttl_tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[tokio::test]
+    #[serial]
+    async fn test_expire_success() {
+        let (_node, config) = start_redis_container().await;
+        let redis_interface = Redis::new(&config.url);
+
+        // 1. On crée une clé
+        let _ = redis_interface.set("expire_key", "expire_value").await;
+
+        // 2. On applique un TTL de 10 secondes
+        let result = redis_interface.expire("expire_key", 10).await;
+        assert!(result.is_ok(), "L'application du TTL devrait réussir");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_secure_expire_on_existing_key() {
+        let (_node, config) = start_redis_container().await;
+        let redis_interface = Redis::new(&config.url);
+
+        // 1. On crée une clé via secure_set
+        let _ = redis_interface
+            .secure_set("secure_expire_key", "value")
+            .await;
+
+        // 2. secure_expire sur une clé existante doit réussir
+        let result = redis_interface.secure_expire("secure_expire_key", 30).await;
+        assert!(
+            result.is_ok(),
+            "secure_expire devrait réussir si la clé existe"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_secure_expire_on_non_existent_key() {
+        let (_node, config) = start_redis_container().await;
+        let redis_interface = Redis::new(&config.url);
+
+        // secure_expire sur une clé qui n'existe pas ne doit pas planter (comportement no-op sécurisé)
+        let result = redis_interface.secure_expire("ghost_key", 30).await;
+        assert!(
+            result.is_ok(),
+            "secure_expire sur une clé inexistante doit renvoyer Ok (comportement sécurisé)"
+        );
+    }
+}

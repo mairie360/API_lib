@@ -21,7 +21,7 @@ impl SmartDatabase {
     where
         Q: ApiRequestDto,
     {
-        // 1. On exécute la modification en base (qu'ce soit un INSERT, UPDATE ou DELETE)
+        // 1. On exécute la modification en base (INSERT, UPDATE ou DELETE)
         self.db.execute(&query).await?;
 
         // 2. Si la vue déclare une clé de cache, on l'invalide systématiquement
@@ -38,7 +38,9 @@ impl SmartDatabase {
         Q: ApiRequestDto,
     {
         let cache_key = query.cache_key();
-        // 1. Si la vue a une clé de cache, on interroge directement Redis avec la String
+        let cache_ttl = query.cache_ttl();
+
+        // 1. Si la vue a une clé de cache, on interroge directement Redis
         if let Some(ref key) = cache_key {
             if let Ok(Some(json_str)) = self.redis.secure_get::<String>(key).await {
                 if let Ok(value) = serde_json::from_str::<T>(&json_str) {
@@ -50,10 +52,14 @@ impl SmartDatabase {
         // 2. Sinon, on tape dans PostgreSQL
         let value: T = self.db.fetch_one(query).await?;
 
-        // 3. On remplit le cache si nécessaire
+        // 3. On remplit le cache et on applique le TTL si défini
         if let Some(ref key) = cache_key {
             if let Ok(json_str) = serde_json::to_string(&value) {
                 let _ = self.redis.secure_set(key, json_str).await;
+
+                if let Some(ttl) = cache_ttl {
+                    let _ = self.redis.secure_expire(key, ttl).await;
+                }
             }
         }
 
@@ -65,22 +71,29 @@ impl SmartDatabase {
         T: DeserializeOwned + Serialize,
         Q: ApiRequestDto,
     {
+        let cache_key = query.cache_key();
+        let cache_ttl = query.cache_ttl();
+
         // 1. Si la vue déclare une clé de cache, on tente de récupérer la liste complète
-        if let Some(ref key) = query.cache_key() {
+        if let Some(ref key) = cache_key {
             if let Ok(Some(json_str)) = self.redis.secure_get::<String>(key).await {
                 if let Ok(values) = serde_json::from_str::<Vec<T>>(&json_str) {
-                    return Ok(values); // Cache Hit ! La liste est retournée directement depuis Redis
+                    return Ok(values); // Cache Hit !
                 }
             }
         }
 
-        // 2. Cache Miss ou pas de cache : on interroge PostgreSQL via ta méthode existante
+        // 2. Cache Miss : on interroge PostgreSQL
         let values: Vec<T> = self.db.fetch_all(query).await?;
 
-        // 3. Si la vue a une clé de cache, on sérialise et stocke tout le vecteur dans Redis
-        if let Some(ref key) = query.cache_key() {
+        // 3. Stockage dans Redis + application du TTL si défini
+        if let Some(ref key) = cache_key {
             if let Ok(json_str) = serde_json::to_string(&values) {
                 let _ = self.redis.secure_set(key, json_str).await;
+
+                if let Some(ttl) = cache_ttl {
+                    let _ = self.redis.secure_expire(key, ttl).await;
+                }
             }
         }
 
@@ -95,19 +108,26 @@ impl SmartDatabase {
         T: FromRedisValue + ToSingleRedisArg + Send + Sync + std::marker::Copy,
         Q: ApiRequestDto,
     {
-        // 1. Si la vue déclare une clé de cache, on tente de récupérer le scalaire dans Redis
-        if let Some(ref key) = query.cache_key() {
+        let cache_key = query.cache_key();
+        let cache_ttl = query.cache_ttl();
+
+        // 1. Si la vue déclare une clé de cache, on tente de récupérer le scalaire
+        if let Some(ref key) = cache_key {
             if let Ok(Some(value)) = self.redis.secure_get::<T>(key).await {
                 return Ok(value); // Cache Hit !
             }
         }
 
-        // 2. Cache Miss ou pas de cache : on interroge PostgreSQL
+        // 2. Cache Miss : on interroge PostgreSQL
         let value: T = self.db.fetch_scalar(query).await?;
 
-        // 3. Si la vue a une clé de cache, on stocke directement le scalaire dans Redis
-        if let Some(ref key) = query.cache_key() {
+        // 3. Stockage dans Redis + application du TTL si défini
+        if let Some(ref key) = cache_key {
             let _ = self.redis.secure_set(key, value).await;
+
+            if let Some(ttl) = cache_ttl {
+                let _ = self.redis.secure_expire(key, ttl).await;
+            }
         }
 
         Ok(value)

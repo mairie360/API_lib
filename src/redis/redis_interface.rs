@@ -141,6 +141,24 @@ impl Redis {
         Ok(result)
     }
 
+    pub async fn expire(&self, key: &str, seconds: u64) -> Result<(), RedisError> {
+        let pool = self
+            .get_pool()
+            .await
+            .map_err(|e| RedisError::Pool(e.to_string()))?;
+        let mut conn = pool
+            .get()
+            .await
+            .map_err(|e| RedisError::Pool(e.to_string()))?;
+
+        let _: () = conn
+            .expire(key, seconds as i64)
+            .await
+            .map_err(|e| RedisError::Driver(e.to_string()))?;
+
+        Ok(())
+    }
+
     pub async fn key_exist(&self, key: &str) -> Result<bool, RedisError> {
         let pool = self
             .get_pool()
@@ -229,6 +247,27 @@ impl Redis {
         }
 
         self.delete(key)
+            .await
+            .map_err(|e| RedisError::Driver(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub async fn secure_expire(&self, key: &str, seconds: u64) -> Result<(), RedisError> {
+        let pool = self
+            .get_pool()
+            .await
+            .map_err(|e| RedisError::Pool(e.to_string()))?;
+        let mut conn = pool
+            .get()
+            .await
+            .map_err(|e| RedisError::Pool(e.to_string()))?;
+
+        if !conn.exists(key).await.unwrap_or(false) {
+            return Ok(());
+        }
+
+        self.expire(key, seconds)
             .await
             .map_err(|e| RedisError::Driver(e.to_string()))?;
 

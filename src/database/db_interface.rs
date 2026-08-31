@@ -94,6 +94,9 @@ pub trait ApiRequestDto: DeserializeOwned {
     fn cache_key(&self) -> Option<String> {
         None
     }
+    fn cache_ttl(&self) -> Option<u64> {
+        None
+    }
 }
 
 fn build_arguments(params: &[QueryParam]) -> Result<PgArguments, DbError> {

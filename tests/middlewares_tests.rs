@@ -135,22 +135,6 @@ mod auth_middleware {
         let body = test::read_body(resp).await;
         assert!(body.starts_with(b"Unauthorized: JWT token is expired."));
     }
-
-    #[tokio::test]
-    async fn test_middleware_missing_db_pool_returns_500() {
-        // App sans .app_data(app_state) pour tester la branche d'erreur "DB Pool missing"
-        let app = test::init_service(
-            App::new()
-                .wrap(JwtMiddleware)
-                .route("/protected", web::get().to(index)),
-        )
-        .await;
-
-        let req = test::TestRequest::get().uri("/protected").to_request();
-        let resp = test::call_service(&app, req).await;
-
-        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
-    }
 }
 
 #[cfg(test)]

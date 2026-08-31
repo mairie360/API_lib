@@ -7,8 +7,8 @@ use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use std::rc::Rc;
 
+use crate::pool::AppState;
 use crate::security::AuthenticatedUser;
-use crate::{database::queries::is_admin_query, pool::AppState};
 use crate::{
     database::query_views::IsAdminQueryView,
     jwt_manager::{check_jwt_validity, get_jwt_from_request, get_user_id_from_jwt, JWTCheckError},
@@ -71,39 +71,29 @@ where
      */
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let svc = self.service.clone();
-        let app_state = req.app_data::<actix_web::web::Data<AppState>>();
 
-        // On clone le pool pour la closure async move
-        let pool = match app_state {
-            Some(state) => state.db_pool.clone(),
-            None => None,
-        };
+        // 1. On extrait l'AppState directement
+        let app_state = req
+            .app_data::<actix_web::web::Data<AppState>>()
+            .cloned()
+            .unwrap();
 
-        let path = req.path();
-        lazy_static! {
-            // Cette regex cherche un chemin qui contient ou commence par /api/v[chiffre]/admin
-            static ref ADMIN_PATH_REGEX: Regex = Regex::new(r"/api/v\d+/admin").unwrap();
-        }
-
-        // Si le chemin NE correspond PAS au pattern admin, on passe au service suivant
-        if !ADMIN_PATH_REGEX.is_match(path) {
-            return Box::pin(async move {
-                let res = svc.call(req).await?;
-                Ok(res.map_into_left_body())
-            });
-        }
+        // 2. On extrait le path tout de suite pour ne plus emprunter `req` inutilement
+        let path = req.path().to_string();
 
         Box::pin(async move {
-            let pool = match pool {
-                Some(p) => p,
-                None => {
-                    // Erreur si le pool n'a pas été injecté dans l'App
-                    let res = HttpResponse::InternalServerError()
-                        .body("DB Pool missing")
-                        .map_into_right_body();
-                    return Ok(req.into_response(res));
-                }
-            };
+            // Vérification de l'AppState
+            let db_interface = app_state.get_db_interface();
+
+            lazy_static! {
+                static ref ADMIN_PATH_REGEX: Regex = Regex::new(r"/api/v\d+/admin").unwrap();
+            }
+
+            // Si le chemin NE correspond PAS au pattern admin, on passe au service suivant
+            if !ADMIN_PATH_REGEX.is_match(&path) {
+                let res = svc.call(req).await?;
+                return Ok(res.map_into_left_body());
+            }
 
             let jwt_option = get_jwt_from_request(req.request());
 
@@ -117,15 +107,30 @@ where
                 }
             };
 
-            match check_jwt_validity(&jwt, pool.clone()).await {
+            match check_jwt_validity(&jwt, &db_interface).await {
                 Ok(_) => {
-                    let view: IsAdminQueryView = IsAdminQueryView::new(
-                        get_user_id_from_jwt(&jwt).unwrap().parse().unwrap_or(0),
-                    );
-                    if is_admin_query(view, pool).await.unwrap() {
-                        req.extensions_mut().insert(AuthenticatedUser {
-                            id: get_user_id_from_jwt(&jwt).unwrap().parse().unwrap_or(0),
-                        });
+                    let user_id_str = match get_user_id_from_jwt(&jwt) {
+                        Some(id) => id,
+                        None => {
+                            let response = HttpResponse::Unauthorized()
+                                .body("Unauthorized: Invalid token payload.")
+                                .map_into_right_body();
+                            return Ok(req.into_response(response));
+                        }
+                    };
+
+                    let user_id = user_id_str.parse().unwrap_or(0);
+                    let view = IsAdminQueryView::new(user_id);
+
+                    // Note : si fetch_as/fetch_scalar prend &self, pas besoin de mut,
+                    // mais adaptez selon la signature de votre lib de DB
+                    if db_interface
+                        .fetch_scalar::<bool, _>(view)
+                        .await
+                        .unwrap_or(false)
+                    {
+                        req.extensions_mut()
+                            .insert(AuthenticatedUser { id: user_id });
 
                         let res = svc.call(req).await?;
                         Ok(res.map_into_left_body())

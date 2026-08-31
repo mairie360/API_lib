@@ -32,7 +32,7 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
             let view = DoesUserExistByIdQueryView::new(1);
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(result, "Expected user to exist by ID"); // Plus propre que assert_eq!(result, true)
         }
@@ -44,7 +44,7 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
             let view = DoesUserExistByIdQueryView::new(999);
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(!result, "Expected user to not exist by ID");
         }
@@ -62,7 +62,7 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
             let view = DoesUserExistByEmailQueryView::new("alice@example.com".to_string());
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(result, "Expected user to exist by email");
         }
@@ -74,7 +74,7 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
             let view = DoesUserExistByEmailQueryView::new("unknown@example.com".to_string());
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(!result, "Expected user to not exist by email");
         }
@@ -87,7 +87,7 @@ mod queries_tests {
             let email = "invalid-email";
             let view = DoesUserExistByEmailQueryView::new(email.to_string());
 
-            let result = interface.fetch_scalar::<bool, _>(view).await;
+            let result = interface.fetch_scalar::<bool, _>(&view).await;
 
             // Ici on valide que ton From<sqlx::Error> ou ta validation manuelle fonctionne
             assert!(
@@ -113,7 +113,7 @@ mod queries_tests {
             let malicious_email = "' OR 1=1 --";
             let view = DoesUserExistByEmailQueryView::new(malicious_email.to_string());
 
-            let result = interface.fetch_scalar::<bool, _>(view).await;
+            let result = interface.fetch_scalar::<bool, _>(&view).await;
 
             // Comme il n'y a pas de '@', ta fonction renvoie l'erreur de format AVANT la DB
             assert!(
@@ -148,7 +148,7 @@ mod queries_tests {
                 IpAddr::from([127, 0, 0, 1]),
             );
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(result);
         }
@@ -167,7 +167,7 @@ mod queries_tests {
                 IpAddr::from([127, 0, 0, 1]),
             );
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(!result);
         }
@@ -186,7 +186,7 @@ mod queries_tests {
                 IpAddr::from([127, 0, 0, 2]),
             );
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(!result);
         }
@@ -205,7 +205,7 @@ mod queries_tests {
                 IpAddr::from([127, 0, 0, 1]),
             );
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(!result);
         }
@@ -231,7 +231,7 @@ mod queries_tests {
                 Some(1),
             );
 
-            let result = interface.fetch_scalar::<i32, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
             assert!(result == 1, "expected access granted, got {}", result);
         }
@@ -251,7 +251,7 @@ mod queries_tests {
                 Some(1),
             );
 
-            let result = interface.fetch_scalar::<i32, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
             assert!(result == 1, "expected access granted, got {}", result);
         }
@@ -309,7 +309,7 @@ mod queries_tests {
 
             // 5. Exécution du test
             let view = HasAccessQueryView::new(alice_id as u64, "groups", "read", Some(50));
-            let result = interface.fetch_scalar::<i32, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
             assert!(
                 result == 1,
@@ -358,7 +358,7 @@ mod queries_tests {
                 Some(10),
             );
 
-            let result = interface.fetch_scalar::<i32, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
             assert!(result == 0, "expected access denied, got {}", result);
         }
@@ -378,7 +378,7 @@ mod queries_tests {
                 Some(0),
             );
 
-            let result = interface.fetch_scalar::<i32, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
             assert!(result == -1, "expected access denied, got {}", result);
         }
@@ -402,7 +402,7 @@ mod queries_tests {
                     .unwrap() as u64,
             );
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(result, "Expected admin to be admin");
         }
@@ -419,7 +419,7 @@ mod queries_tests {
                     .unwrap() as u64,
             );
 
-            let result = interface.fetch_scalar::<bool, _>(view).await.unwrap();
+            let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
             assert!(!result, "Expected non-admin to not be admin");
         }

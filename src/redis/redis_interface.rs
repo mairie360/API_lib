@@ -25,11 +25,6 @@ pub enum RedisError {
     Value(String),
 }
 
-pub trait RedisRequestDto {
-    fn key(&self) -> &str;
-    fn args(&self) -> &[RedisParam];
-}
-
 #[derive(Clone)]
 pub struct Redis {
     inner: Arc<RedisInner>,
@@ -82,9 +77,8 @@ impl Redis {
         Ok(pool)
     }
 
-    pub async fn get<T, Q>(&self, query: Q) -> Result<T, RedisError>
+    pub async fn get<T>(&self, key: &str) -> Result<T, RedisError>
     where
-        Q: RedisRequestDto,
         T: FromRedisValue, // <--- C'est ici que la magie opère
     {
         let pool = self
@@ -98,7 +92,7 @@ impl Redis {
             .map_err(|e| RedisError::Pool(e.to_string()))?;
 
         let result: T = conn
-            .get(query.key())
+            .get(key)
             .await
             .map_err(|e| RedisError::Driver(e.to_string()))?;
 
@@ -167,10 +161,9 @@ impl Redis {
         Ok(result)
     }
 
-    pub async fn secure_get<T, Q>(&self, query: Q) -> Result<Option<T>, RedisError>
+    pub async fn secure_get<T>(&self, key: &str) -> Result<Option<T>, RedisError>
     where
         T: FromRedisValue,
-        Q: RedisRequestDto,
     {
         let pool = self
             .get_pool()
@@ -182,13 +175,13 @@ impl Redis {
             .await
             .map_err(|e| RedisError::Pool(e.to_string()))?;
 
-        if !conn.exists(query.key()).await.unwrap_or(false) {
+        if !conn.exists(key).await.unwrap_or(false) {
             return Ok(None);
         }
 
         // Ajout explicite du turbofish ::<()> pour éviter l'erreur de typage
         let result = self
-            .get::<T, Q>(query)
+            .get::<T>(key)
             .await
             .map_err(|e| RedisError::Driver(e.to_string()))?;
 

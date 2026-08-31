@@ -125,7 +125,7 @@ where
                     // Note : si fetch_as/fetch_scalar prend &self, pas besoin de mut,
                     // mais adaptez selon la signature de votre lib de DB
                     if db_interface
-                        .fetch_scalar::<bool, _>(view)
+                        .fetch_scalar::<bool, _>(&view)
                         .await
                         .unwrap_or(false)
                     {

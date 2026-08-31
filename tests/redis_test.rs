@@ -1,31 +1,6 @@
 use mairie360_api_lib::{
-    redis::redis_interface::{Redis, RedisParam, RedisRequestDto},
-    test_setup::redis_setup::start_redis_container,
+    redis::redis_interface::Redis, test_setup::redis_setup::start_redis_container,
 };
-
-struct TestDto {
-    key: String,
-    params: Vec<RedisParam>,
-}
-
-impl TestDto {
-    fn new(key: &str, params: Vec<RedisParam>) -> Self {
-        Self {
-            key: key.to_string(),
-            params,
-        }
-    }
-}
-
-impl RedisRequestDto for TestDto {
-    fn key(&self) -> &str {
-        &self.key
-    }
-
-    fn args(&self) -> &[RedisParam] {
-        &self.params
-    }
-}
 
 #[cfg(test)]
 mod unsecured_redis_tests {
@@ -62,9 +37,7 @@ mod unsecured_redis_tests {
         let first_response = redis_interface.set("get_unique_key", "value1").await;
         assert!(first_response.is_ok());
 
-        let params = vec![];
-        let dto = TestDto::new("get_unique_key", params);
-        let second_response = redis_interface.get::<String, TestDto>(dto).await;
+        let second_response = redis_interface.get::<String>("get_unique_key").await;
         assert!(
             second_response.is_ok(),
             "The key should be found after a successful first add, got error: {second_response:?}"
@@ -90,9 +63,7 @@ mod unsecured_redis_tests {
             "Key should be deleted and return an error on GET"
         );
 
-        let params = vec![];
-        let dto = TestDto::new("test_key", params);
-        let get_result = redis_interface.get::<String, TestDto>(dto).await;
+        let get_result = redis_interface.get::<String>("test_key").await;
         assert!(
             get_result.is_err(),
             "Key should not be found after deletion"
@@ -141,9 +112,9 @@ mod safe_redis_tests {
             .secure_set("get_secured_key", "test_value")
             .await;
 
-        let params = vec![];
-        let dto = TestDto::new("get_secured_key", params);
-        let result = redis_interface.secure_get::<String, TestDto>(dto).await;
+        let result = redis_interface
+            .secure_get::<String>("get_secured_key")
+            .await;
         assert!(result.is_ok());
         let value = result.unwrap();
         assert_eq!(value, Some("test_value".to_string()));
@@ -161,11 +132,17 @@ mod safe_redis_tests {
         let result = redis_interface.secure_delete("delete_secured_key").await;
         assert!(result.is_ok());
 
-        let params = vec![];
-        let dto = TestDto::new("delete_secured_key", params);
+        let result = redis_interface
+            .secure_get::<String>("delete_secured_key")
+            .await;
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert!(value.is_none());
 
         // secure_get renvoie Result<Option<T>, RedisError>
-        let result = redis_interface.secure_get::<String, TestDto>(dto).await;
+        let result = redis_interface
+            .secure_get::<String>("delete_secured_key")
+            .await;
 
         assert!(result.is_ok());
         assert!(

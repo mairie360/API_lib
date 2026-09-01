@@ -69,14 +69,12 @@ where
      */
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let svc = self.service.clone();
-        let app_state = req.app_data::<actix_web::web::Data<AppState>>();
+        let app_state = req
+            .app_data::<actix_web::web::Data<AppState>>()
+            .cloned()
+            .unwrap();
 
-        // On clone le pool pour la closure async move
-        let pool = match app_state {
-            Some(state) => state.db_pool.clone(),
-            None => None,
-        };
-
+        // 2. On extrait le path tout de suite pour ne plus emprunter `req` inutilement
         let path = req.path();
         if path == "/"
             || path.starts_with("/swagger-ui")
@@ -90,16 +88,7 @@ where
         }
 
         Box::pin(async move {
-            let pool = match pool {
-                Some(p) => p,
-                None => {
-                    // Erreur si le pool n'a pas été injecté dans l'App
-                    let res = HttpResponse::InternalServerError()
-                        .body("DB Pool missing")
-                        .map_into_right_body();
-                    return Ok(req.into_response(res));
-                }
-            };
+            let db_interface = app_state.get_db_interface();
 
             let jwt_option = get_jwt_from_request(req.request());
 
@@ -113,7 +102,7 @@ where
                 }
             };
 
-            match check_jwt_validity(&jwt, pool).await {
+            match check_jwt_validity(&jwt, &db_interface).await {
                 Ok(_) => {
                     // ON AJOUTE L'UTILISATEUR DANS LES EXTENSIONS
                     // Supposons que claims.sub contient l'ID

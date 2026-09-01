@@ -1,11 +1,10 @@
 pub mod redis;
+use crate::database::db_interface::Database;
 use deadpool_redis::{Config, Pool, Runtime};
-use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
 
 pub struct AppState {
     redis_pool: Option<Pool>,
-    pub db_pool: Option<PgPool>,
+    pub db_interface: Database,
 }
 
 impl AppState {
@@ -15,24 +14,17 @@ impl AppState {
         let redis_pool = redis_cfg.create_pool(Some(Runtime::Tokio1));
 
         // --- Initialisation PostgreSQL ---
-        let db_pool = PgPoolOptions::new()
-            .max_connections(5)
-            .acquire_timeout(std::time::Duration::from_secs(3))
-            .connect(&pg_url)
-            .await;
+        let db_interface = Database::new(&pg_url).await;
 
         eprintln!("redis status: {:?}", redis_pool.is_ok());
-        eprintln!("pg status: {:?}", db_pool.is_ok());
+        eprintln!("pg status: {:?}", db_interface.is_connected().await);
 
         Self {
             redis_pool: match redis_pool {
                 Ok(pool) => Some(pool),
                 Err(_) => None,
             },
-            db_pool: match db_pool {
-                Ok(pool) => Some(pool),
-                Err(_) => None,
-            },
+            db_interface: db_interface,
         }
     }
 
@@ -43,10 +35,7 @@ impl AppState {
         }
     }
 
-    pub async fn get_db_conn(&self) -> Option<sqlx::pool::PoolConnection<sqlx::Postgres>> {
-        match &self.db_pool {
-            Some(pool) => pool.acquire().await.ok(),
-            None => None,
-        }
+    pub fn get_db_interface(&self) -> &Database {
+        &self.db_interface
     }
 }

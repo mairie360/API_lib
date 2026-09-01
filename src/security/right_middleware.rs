@@ -5,7 +5,9 @@ use actix_web::{
 };
 use actix_web::{Error, HttpMessage};
 
-use crate::{pool::AppState, security::AuthenticatedUser};
+use crate::{
+    database::query_views::HasAccessQueryView, pool::AppState, security::AuthenticatedUser,
+};
 
 #[derive(Clone)]
 pub struct AccessCheckConfig {
@@ -35,10 +37,10 @@ pub async fn access_guard_middleware(
         .ok_or_else(|| actix_web::error::ErrorUnauthorized("User not authenticated"))?;
 
     // 3. Extraire l'ID de l'instance dans l'URL (si défini)
-    let mut instance_id: Option<i32> = None;
+    let mut instance_id: Option<u64> = None;
     if let Some(param_name) = config.id_param_pattern {
         if let Some(val) = req.match_info().get(param_name) {
-            instance_id = val.parse::<i32>().ok();
+            instance_id = val.parse::<u64>().ok();
             if instance_id.is_none() {
                 return Err(actix_web::error::ErrorBadRequest(
                     "Invalid ID format in URL",
@@ -52,22 +54,12 @@ pub async fn access_guard_middleware(
         .app_data::<actix_web::web::Data<AppState>>()
         .ok_or_else(|| actix_web::error::ErrorInternalServerError("AppState missing"))?;
 
-    let db_pool = match app_state.db_pool.clone() {
-        Some(pool) => pool,
-        None => {
-            return Err(actix_web::error::ErrorInternalServerError(
-                "Database pool missing",
-            ))
-        }
-    };
+    let db_interface = app_state.get_db_interface();
 
     // Mise à jour ici : On récupère un i32 au lieu d'un bool
-    let access_status = sqlx::query_scalar::<_, i32>("SELECT check_access($1, $2, $3, $4)")
-        .bind(user.id as i32)
-        .bind(config.resource_name)
-        .bind(config.action)
-        .bind(instance_id)
-        .fetch_one(&db_pool)
+    let view = HasAccessQueryView::new(user.id, config.resource_name, config.action, instance_id);
+    let access_status = db_interface
+        .fetch_scalar::<i32, _>(view)
         .await
         .map_err(|e| {
             eprintln!("Access check SQL error: {:?}", e);

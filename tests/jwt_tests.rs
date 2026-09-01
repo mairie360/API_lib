@@ -4,8 +4,6 @@ use mairie360_api_lib::jwt_manager::{
 use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
 use once_cell::sync::Lazy;
 use serial_test::serial;
-use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
 use std::env;
 
 /**
@@ -41,18 +39,8 @@ fn setup() {
  */
 #[cfg(test)]
 mod jwt_tests {
-    use mairie360_api_lib::jwt_manager::JWTCheckError;
-
     use super::*;
-
-    async fn get_pool(url: String) -> PgPool {
-        PgPoolOptions::new()
-            .max_connections(5)
-            .acquire_timeout(std::time::Duration::from_secs(3))
-            .connect(&url) // On passe l'URL construite ici
-            .await
-            .expect("Failed to create Postgres pool")
-    }
+    use mairie360_api_lib::{database::db_interface::Database, jwt_manager::JWTCheckError};
 
     /**
      * Tests the retrieval of the JWT secret.
@@ -148,10 +136,10 @@ mod jwt_tests {
     async fn test_jwt_check_valid() {
         setup();
         let (_container, host) = get_shared_db().await;
-        let pool = get_pool(host.as_str().to_string()).await;
+        let interface: Database = Database::new(host.as_str()).await;
         let token = generate_jwt(USER_ID).unwrap();
         assert!(
-            check_jwt_validity(&token, pool).await.is_ok(),
+            check_jwt_validity(&token, &interface).await.is_ok(),
             "JWT validity check failed"
         );
     }
@@ -161,9 +149,9 @@ mod jwt_tests {
     async fn test_jwt_check_empty_token() {
         setup();
         let (_container, host) = get_shared_db().await;
-        let pool = get_pool(host.as_str().to_string()).await;
+        let interface: Database = Database::new(host.as_str()).await;
         assert_eq!(
-            check_jwt_validity("", pool).await.unwrap_err(),
+            check_jwt_validity("", &interface).await.unwrap_err(),
             JWTCheckError::NoTokenProvided,
             "Expected error for invalid JWT"
         );
@@ -174,10 +162,12 @@ mod jwt_tests {
     async fn test_jwt_check_token_without_id() {
         setup();
         let (_container, host) = get_shared_db().await;
-        let pool = get_pool(host.as_str().to_string()).await;
+        let interface: Database = Database::new(host.as_str()).await;
         let invalid_token = generate_jwt("").unwrap();
         assert_eq!(
-            check_jwt_validity(&invalid_token, pool).await.unwrap_err(),
+            check_jwt_validity(&invalid_token, &interface)
+                .await
+                .unwrap_err(),
             JWTCheckError::InvalidToken,
             "Expected error for invalid JWT"
         );
@@ -188,10 +178,12 @@ mod jwt_tests {
     async fn test_jwt_check_invalid_user_id() {
         setup();
         let (_container, host) = get_shared_db().await;
-        let pool = get_pool(host.as_str().to_string()).await;
+        let interface: Database = Database::new(host.as_str()).await;
         let invalid_token = generate_jwt("8").unwrap();
         assert_eq!(
-            check_jwt_validity(&invalid_token, pool).await.unwrap_err(),
+            check_jwt_validity(&invalid_token, &interface)
+                .await
+                .unwrap_err(),
             JWTCheckError::UnknownUser,
             "Expected error for invalid JWT"
         );

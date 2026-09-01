@@ -7,15 +7,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-#[derive(Debug, thiserror::Error)]
-pub enum DbError {
-    #[error("Erreur interne : {0}")]
-    Internal(String),
-    #[error("Erreur de correspondance du DTO : {0}")]
-    MappingError(String),
-    #[error("Erreur de base de données : {0}")]
-    Sqlx(#[from] sqlx::Error),
-}
+use crate::database::error::DbError;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum QueryParam {

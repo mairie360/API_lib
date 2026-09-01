@@ -1,17 +1,7 @@
 use crate::database::query_views::DoesUserExistByIdQueryView;
-use crate::jwt_manager::get_timeout_from_jwt;
-use crate::jwt_manager::get_user_id_from_jwt;
-use crate::jwt_manager::verify_jwt_timeout;
+use crate::jwt_manager::decode_jwt::decode_jwt;
+use crate::jwt_manager::error::JWTCheckError;
 use crate::smart_db::SmartDatabase;
-
-#[derive(Debug, PartialEq)]
-pub enum JWTCheckError {
-    DatabaseError,
-    NoTokenProvided,
-    ExpiredToken,
-    InvalidToken,
-    UnknownUser,
-}
 
 pub async fn check_jwt_validity(
     jwt: &str,
@@ -21,57 +11,41 @@ pub async fn check_jwt_validity(
         eprintln!("No JWT token provided.");
         return Err(JWTCheckError::NoTokenProvided);
     }
-    let user_id = match get_user_id_from_jwt(&jwt) {
-        Some(id) => id,
-        None => {
-            eprintln!("Failed to decode JWT token.");
-            return Err(JWTCheckError::InvalidToken);
+
+    // 1. Décodage et distinction de l'expiration vs token invalide
+    let claims = decode_jwt(jwt).map_err(|err| {
+        eprintln!("JWT decode error: {:?}", err);
+        if matches!(
+            err.kind(),
+            jsonwebtoken::errors::ErrorKind::ExpiredSignature
+        ) {
+            JWTCheckError::ExpiredToken
+        } else {
+            JWTCheckError::InvalidToken
         }
-    };
+    })?;
 
-    let parsed_user_id: usize = match user_id.parse() {
-        Ok(id) => id,
-        Err(_) => {
-            eprintln!("Failed to parse user ID from JWT.");
-            return Err(JWTCheckError::InvalidToken);
-        }
-    };
+    // 2. Extraction et parsing de l'ID utilisateur
+    let user_id_str = claims.get_user_id();
+    let parsed_user_id: u64 = user_id_str.parse().map_err(|_| {
+        eprintln!("Failed to parse user ID from JWT claims.");
+        JWTCheckError::InvalidToken
+    })?;
 
-    let query_view: DoesUserExistByIdQueryView =
-        DoesUserExistByIdQueryView::new(parsed_user_id as u64);
-
-    let result = db_interface.fetch_scalar::<bool, _>(&query_view).await;
-
-    let exist = match result {
-        Ok(res) => res,
-        Err(e) => {
+    // 3. Vérification en base de données
+    let query_view = DoesUserExistByIdQueryView::new(parsed_user_id);
+    let exist = db_interface
+        .fetch_scalar::<bool, _>(&query_view)
+        .await
+        .map_err(|e| {
             eprintln!("Database query error: {}", e);
-            return Err(JWTCheckError::DatabaseError);
-        }
-    };
+            JWTCheckError::DatabaseError
+        })?;
 
-    if exist {
-        let timeout: usize = match get_timeout_from_jwt(&jwt) {
-            Some(t) => t,
-            None => {
-                eprintln!("Failed to retrieve timeout from JWT.");
-                return Err(JWTCheckError::InvalidToken);
-            }
-        };
-
-        match verify_jwt_timeout(timeout) {
-            Ok(true) => Ok(()),
-            Ok(false) => {
-                eprintln!("JWT token is expired.");
-                Err(JWTCheckError::ExpiredToken)
-            }
-            Err(e) => {
-                eprintln!("Error verifying JWT timeout: {}", e);
-                Err(JWTCheckError::InvalidToken)
-            }
-        }
-    } else {
-        eprintln!("User does not exist with ID: {}", user_id);
+    if !exist {
+        eprintln!("User does not exist with ID: {}", user_id_str);
         return Err(JWTCheckError::UnknownUser);
     }
+
+    Ok(())
 }

@@ -41,7 +41,7 @@ fn setup() {
 mod jwt_tests {
     use super::*;
     use mairie360_api_lib::{
-        database::db_interface::Database, jwt_manager::JWTCheckError,
+        database::db_interface::Database, jwt_manager::error::JWTCheckError,
         redis::redis_interface::Redis, smart_db::SmartDatabase,
     };
 
@@ -173,10 +173,11 @@ mod jwt_tests {
         let redis: Redis = Redis::new("");
         let interface: SmartDatabase = SmartDatabase::new(db_interface, redis);
         let invalid_token = generate_jwt("").unwrap();
+        let result = check_jwt_validity(&invalid_token, &interface).await;
+        assert!(result.is_err(), "Expected error for invalid JWT");
+        let error = result.unwrap_err();
         assert_eq!(
-            check_jwt_validity(&invalid_token, &interface)
-                .await
-                .unwrap_err(),
+            error,
             JWTCheckError::InvalidToken,
             "Expected error for invalid JWT"
         );

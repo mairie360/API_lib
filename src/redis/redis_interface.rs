@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use crate::redis::error::RedisError;
 use deadpool_redis::{Config, Pool, PoolError, Runtime};
 use redis::{AsyncCommands, FromRedisValue, ToSingleRedisArg};
-use thiserror::Error;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone)]
@@ -11,18 +11,6 @@ pub enum RedisParam {
     I64(i64),
     I32(i32),
     Bytes(Vec<u8>),
-}
-
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum RedisError {
-    #[error("Erreur de pool Redis : {0}")]
-    Pool(String),
-    #[error("Erreur du driver Redis : {0}")]
-    Driver(String),
-    #[error("Erreur interne Redis : {0}")]
-    Internal(String),
-    #[error("Erreur de valeur Redis : {0}")]
-    Value(String),
 }
 
 #[derive(Clone)]

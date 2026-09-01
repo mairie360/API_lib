@@ -12,6 +12,9 @@ pub use generate_jwt::generate_jwt;
 mod get_jwt_from_request;
 pub use get_jwt_from_request::get_jwt_from_request;
 
+mod get_role;
+pub use get_role::get_role_from_jwt;
+
 mod get_jwt_secret;
 pub use get_jwt_secret::get_jwt_secret;
 

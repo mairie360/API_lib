@@ -41,8 +41,10 @@ fn setup() {
 mod jwt_tests {
     use super::*;
     use mairie360_api_lib::{
-        database::db_interface::Database, jwt_manager::error::JWTCheckError,
-        redis::redis_interface::Redis, smart_db::SmartDatabase,
+        database::db_interface::Database,
+        jwt_manager::{error::JWTCheckError, get_role_from_jwt},
+        redis::redis_interface::Redis,
+        smart_db::SmartDatabase,
     };
 
     /**
@@ -96,7 +98,7 @@ mod jwt_tests {
     #[test]
     fn test_generate_jwt() {
         setup();
-        let token = generate_jwt(USER_ID);
+        let token = generate_jwt(USER_ID, "test_role");
         assert!(token.is_ok(), "JWT generation failed: {:?}", token.err());
         let token = token.unwrap();
         assert!(!token.is_empty(), "Generated JWT token is empty");
@@ -111,7 +113,7 @@ mod jwt_tests {
     #[test]
     fn test_get_user_id_from_jwt() {
         setup();
-        let token = generate_jwt(USER_ID).unwrap();
+        let token = generate_jwt(USER_ID, "test_role").unwrap();
         let user_id = get_user_id_from_jwt(&token);
         assert_eq!(
             user_id.unwrap(),
@@ -134,6 +136,36 @@ mod jwt_tests {
         assert_eq!(user_id, None, "Expected None for invalid JWT, got Some");
     }
 
+    /**
+     * Tests the retrieval of a role from a JWT.
+     * It checks if the role can be extracted from a valid JWT.
+     * The role should match the expected value.
+     */
+    #[test]
+    fn test_get_role_from_jwt() {
+        setup();
+        let expected_role = "admin";
+        let token = generate_jwt(USER_ID, expected_role).unwrap();
+        let role = get_role_from_jwt(&token);
+        assert_eq!(
+            role.as_deref(),
+            Some(expected_role),
+            "Role does not match expected value"
+        );
+    }
+
+    /**
+     * Tests the retrieval of a role from an invalid JWT.
+     * It checks if the function returns None when an invalid JWT is provided.
+     */
+    #[test]
+    fn test_get_role_from_invalid_jwt() {
+        setup();
+        let invalid_token = "invalid.token.string";
+        let role = get_role_from_jwt(invalid_token);
+        assert_eq!(role, None, "Expected None for invalid JWT, got Some");
+    }
+
     #[tokio::test]
     #[serial]
     async fn test_jwt_check_valid() {
@@ -142,7 +174,7 @@ mod jwt_tests {
         let db_interface: Database = Database::new(host.as_str()).await;
         let redis: Redis = Redis::new("");
         let interface: SmartDatabase = SmartDatabase::new(db_interface, redis);
-        let token = generate_jwt(USER_ID).unwrap();
+        let token = generate_jwt(USER_ID, "test_role").unwrap();
         assert!(
             check_jwt_validity(&token, &interface).await.is_ok(),
             "JWT validity check failed"
@@ -172,7 +204,7 @@ mod jwt_tests {
         let db_interface: Database = Database::new(host.as_str()).await;
         let redis: Redis = Redis::new("");
         let interface: SmartDatabase = SmartDatabase::new(db_interface, redis);
-        let invalid_token = generate_jwt("").unwrap();
+        let invalid_token = generate_jwt("", "test_role").unwrap();
         let result = check_jwt_validity(&invalid_token, &interface).await;
         assert!(result.is_err(), "Expected error for invalid JWT");
         let error = result.unwrap_err();
@@ -191,7 +223,7 @@ mod jwt_tests {
         let db_interface: Database = Database::new(host.as_str()).await;
         let redis: Redis = Redis::new("");
         let interface: SmartDatabase = SmartDatabase::new(db_interface, redis);
-        let invalid_token = generate_jwt("8").unwrap();
+        let invalid_token = generate_jwt("8", "test_role").unwrap();
         assert_eq!(
             check_jwt_validity(&invalid_token, &interface)
                 .await

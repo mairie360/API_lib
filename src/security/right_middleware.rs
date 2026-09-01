@@ -54,12 +54,12 @@ pub async fn access_guard_middleware(
         .app_data::<actix_web::web::Data<AppState>>()
         .ok_or_else(|| actix_web::error::ErrorInternalServerError("AppState missing"))?;
 
-    let db_interface = app_state.get_db_interface();
+    let db_interface = app_state.get_smart_db();
 
     // Mise à jour ici : On récupère un i32 au lieu d'un bool
     let view = HasAccessQueryView::new(user.id, config.resource_name, config.action, instance_id);
     let access_status = db_interface
-        .fetch_scalar::<i32, _>(view)
+        .fetch_scalar::<i32, _>(&view)
         .await
         .map_err(|e| {
             eprintln!("Access check SQL error: {:?}", e);

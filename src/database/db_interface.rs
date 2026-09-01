@@ -91,6 +91,12 @@ impl QueryParam {
 pub trait ApiRequestDto: DeserializeOwned {
     fn query_sql(&self) -> &'static str;
     fn query_params(&self) -> &[QueryParam];
+    fn cache_key(&self) -> Option<String> {
+        None
+    }
+    fn cache_ttl(&self) -> Option<u64> {
+        None
+    }
 }
 
 fn build_arguments(params: &[QueryParam]) -> Result<PgArguments, DbError> {
@@ -179,7 +185,7 @@ impl Database {
     }
 
     // Méthode interne partagée pour binder et exécuter la requête SQL brute
-    pub async fn execute<Q: ApiRequestDto>(&self, query: Q) -> Result<(), DbError> {
+    pub async fn execute<Q: ApiRequestDto>(&self, query: &Q) -> Result<(), DbError> {
         let pool = self.get_pool().await?;
         let params = query.query_params();
         let args = build_arguments(&params)?;
@@ -192,7 +198,7 @@ impl Database {
     }
 
     /// L'API demande un seul résultat (équivalent à fetch_one de sqlx)
-    pub async fn fetch_one<T, Q: ApiRequestDto>(&self, query: Q) -> Result<T, DbError>
+    pub async fn fetch_one<T, Q: ApiRequestDto>(&self, query: &Q) -> Result<T, DbError>
     where
         T: DeserializeOwned,
     {
@@ -213,7 +219,7 @@ impl Database {
         Ok(item)
     }
 
-    pub async fn fetch_all<T, Q: ApiRequestDto>(&self, query: Q) -> Result<Vec<T>, DbError>
+    pub async fn fetch_all<T, Q: ApiRequestDto>(&self, query: &Q) -> Result<Vec<T>, DbError>
     where
         T: DeserializeOwned,
     {
@@ -238,7 +244,7 @@ impl Database {
         Ok(items)
     }
 
-    pub async fn fetch_scalar<T, Q>(&self, query: Q) -> Result<T, DbError>
+    pub async fn fetch_scalar<T, Q>(&self, query: &Q) -> Result<T, DbError>
     where
         Q: ApiRequestDto,
         // Contraintes nécessaires pour que sqlx sache décoder un type scalaire (ex: bool, i64)

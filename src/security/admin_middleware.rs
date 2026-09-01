@@ -83,7 +83,7 @@ where
 
         Box::pin(async move {
             // Vérification de l'AppState
-            let db_interface = app_state.get_db_interface();
+            let db_interface = app_state.get_smart_db();
 
             lazy_static! {
                 static ref ADMIN_PATH_REGEX: Regex = Regex::new(r"/api/v\d+/admin").unwrap();
@@ -125,7 +125,7 @@ where
                     // Note : si fetch_as/fetch_scalar prend &self, pas besoin de mut,
                     // mais adaptez selon la signature de votre lib de DB
                     if db_interface
-                        .fetch_scalar::<bool, _>(view)
+                        .fetch_scalar::<bool, _>(&view)
                         .await
                         .unwrap_or(false)
                     {

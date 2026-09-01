@@ -1,4 +1,5 @@
 pub mod database;
+pub mod email;
 pub mod env_manager;
 pub mod jwt_manager;
 pub mod pool;

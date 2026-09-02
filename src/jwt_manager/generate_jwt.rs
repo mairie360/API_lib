@@ -4,7 +4,7 @@ use super::jwt_claims::Claims;
 use jsonwebtoken::{encode, EncodingKey, Header};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub fn generate_jwt(user_id_str: &str) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn generate_jwt(user_id_str: &str, role: &str) -> Result<String, jsonwebtoken::errors::Error> {
     let secret: Vec<u8> = get_jwt_secret()?;
     let timeout = get_jwt_timeout()?;
 
@@ -13,7 +13,7 @@ pub fn generate_jwt(user_id_str: &str) -> Result<String, jsonwebtoken::errors::E
         .unwrap()
         .as_secs() as usize
         + timeout; // Token valid for the configured JWT timeout duration
-    let claims = Claims::new(user_id_str.to_owned(), expiration);
+    let claims = Claims::new(user_id_str, role, expiration);
     let token = encode(
         &Header::default(),
         &claims,

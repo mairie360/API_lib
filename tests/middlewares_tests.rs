@@ -83,7 +83,7 @@ mod auth_middleware {
             .get()
             .unwrap();
 
-        let token = generate_jwt(&alice_id.to_string()).unwrap();
+        let token = generate_jwt(&alice_id.to_string(), "test_role").unwrap();
 
         let app = test::init_service(
             App::new()
@@ -117,7 +117,7 @@ mod auth_middleware {
 
         setup();
         env::set_var("JWT_TIMEOUT", "0");
-        let token = generate_jwt("2").unwrap();
+        let token = generate_jwt("2", "test_role").unwrap();
 
         std::thread::sleep(std::time::Duration::from_secs(2));
 
@@ -357,7 +357,7 @@ mod admin_path_tests {
         )
         .await;
 
-        let token = generate_jwt("1").unwrap();
+        let token = generate_jwt("1", "Admin").unwrap();
 
         let req = test::TestRequest::get()
             .uri("/api/v1/admin/all-users")
@@ -387,7 +387,7 @@ mod admin_path_tests {
         )
         .await;
 
-        let token = generate_jwt("Z").unwrap();
+        let token = generate_jwt("Z", "User").unwrap();
 
         let req = test::TestRequest::get()
             .uri("/api/v1/admin/all-users")

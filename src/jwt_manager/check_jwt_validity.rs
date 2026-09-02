@@ -26,7 +26,7 @@ pub async fn check_jwt_validity(
     })?;
 
     // 2. Extraction et parsing de l'ID utilisateur
-    let user_id_str = claims.get_user_id();
+    let user_id_str = claims.user_id();
     let parsed_user_id: u64 = user_id_str.parse().map_err(|_| {
         eprintln!("Failed to parse user ID from JWT claims.");
         JWTCheckError::InvalidToken

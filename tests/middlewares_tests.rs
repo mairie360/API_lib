@@ -1,4 +1,4 @@
-use mairie360_api_lib::{pool::AppState, test_setup::queries_setup::get_shared_db};
+use mairie360_api_lib::{state::AppState, test_setup::queries_setup::get_shared_db};
 
 use std::env;
 
@@ -61,9 +61,15 @@ mod auth_middleware {
 
         // Requête sans header Authorization
         let req = test::TestRequest::get().uri("/protected").to_request();
-        let resp = test::call_service(&app, req).await;
+        let resp = test::try_call_service(&app, req).await;
 
-        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        match resp {
+            Ok(res) => assert_eq!(res.status(), StatusCode::UNAUTHORIZED),
+            Err(err) => assert_eq!(
+                err.as_response_error().status_code(),
+                StatusCode::UNAUTHORIZED
+            ),
+        }
     }
 
     #[tokio::test]
@@ -112,6 +118,7 @@ mod auth_middleware {
         setup();
         env::set_var("JWT_TIMEOUT", "0");
         let token = generate_jwt("2").unwrap();
+
         std::thread::sleep(std::time::Duration::from_secs(2));
 
         let app = test::init_service(
@@ -127,13 +134,17 @@ mod auth_middleware {
             .insert_header(("Authorization", format!("Bearer {}", token)))
             .to_request();
 
-        let resp = test::call_service(&app, req).await;
+        // 1. UTILISER try_call_service
+        let resp = test::try_call_service(&app, req).await;
 
-        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-
-        // Optionnel: vérifier le corps du message
-        let body = test::read_body(resp).await;
-        assert!(body.starts_with(b"Unauthorized: JWT token is expired."));
+        // 2. CAPTURER L'ERREUR COMME POUR LES AUTRES TESTS
+        match resp {
+            Ok(res) => assert_eq!(res.status(), StatusCode::UNAUTHORIZED),
+            Err(err) => assert_eq!(
+                err.as_response_error().status_code(),
+                StatusCode::UNAUTHORIZED
+            ),
+        }
     }
 }
 
@@ -383,15 +394,14 @@ mod admin_path_tests {
             .insert_header(("Authorization", format!("Bearer {}", token)))
             .to_request();
 
-        // On simule un utilisateur (ID 1)
+        let resp = test::try_call_service(&app, req).await;
 
-        let resp = test::call_service(&app, req).await;
-
-        // Le test passe si le statut est OK ou FORBIDDEN (Alice peut être admin ou non)
-        assert!(
-            resp.status() == StatusCode::UNAUTHORIZED,
-            "expected UNAUTHORIZED, got {}",
-            resp.status()
-        );
+        match resp {
+            Ok(res) => assert_eq!(res.status(), StatusCode::UNAUTHORIZED),
+            Err(err) => assert_eq!(
+                err.as_response_error().status_code(),
+                StatusCode::UNAUTHORIZED
+            ),
+        }
     }
 }

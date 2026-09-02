@@ -1,11 +1,10 @@
-mod check_jwt_timeout;
-pub use check_jwt_timeout::verify_jwt_timeout;
-
 mod check_jwt_validity;
 pub use check_jwt_validity::check_jwt_validity;
-pub use check_jwt_validity::JWTCheckError;
 
 mod decode_jwt;
+pub use decode_jwt::decode_jwt;
+
+pub mod error;
 
 mod generate_jwt;
 pub use generate_jwt::generate_jwt;

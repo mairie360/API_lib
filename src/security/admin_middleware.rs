@@ -1,26 +1,20 @@
-use actix_web::{
-    body::EitherBody,
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error, HttpMessage, HttpResponse,
-};
-use futures_util::future::LocalBoxFuture;
-use std::future::{ready, Ready};
-use std::rc::Rc;
-
-use crate::pool::AppState;
 use crate::security::AuthenticatedUser;
 use crate::{
     database::query_views::IsAdminQueryView,
-    jwt_manager::{check_jwt_validity, get_jwt_from_request, get_user_id_from_jwt, JWTCheckError},
+    jwt_manager::{check_jwt_validity, get_jwt_from_request, get_user_id_from_jwt},
+    state::AppState,
 };
+use actix_web::{
+    body::EitherBody,
+    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    Error, HttpMessage,
+};
+use futures_util::future::LocalBoxFuture;
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::future::{ready, Ready};
+use std::rc::Rc;
 
-/**
- * Middleware to check the validity of JWT tokens in incoming requests.
- * If the token is valid, the request is passed to the next service in the chain.
- * If the token is invalid or missing, an appropriate HTTP response is returned.
- */
 pub struct AdminMiddleware;
 
 impl<S, B> Transform<S, ServiceRequest> for AdminMiddleware
@@ -35,9 +29,6 @@ where
     type Transform = AdminMiddlewareService<S>;
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
-    /**
-     * Creates a new instance of the middleware service, wrapping the provided service.
-     */
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(AdminMiddlewareService {
             service: Rc::new(service),
@@ -45,11 +36,6 @@ where
     }
 }
 
-/**
- * Service that implements the actual logic of checking JWT tokens for each incoming request.
- * It uses the `get_jwt_from_request` function to extract the token and the `check_jwt_validity` function to validate it.
- * Depending on the result, it either forwards the request to the next service or returns an appropriate HTTP response.
- */
 pub struct AdminMiddlewareService<S> {
     service: Rc<S>,
 }
@@ -66,98 +52,54 @@ where
 
     forward_ready!(service);
 
-    /**
-     * Handles the incoming request by checking for a JWT token and validating it.
-     */
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let svc = self.service.clone();
-
-        // 1. On extrait l'AppState directement
         let app_state = req
             .app_data::<actix_web::web::Data<AppState>>()
             .cloned()
             .unwrap();
 
-        // 2. On extrait le path tout de suite pour ne plus emprunter `req` inutilement
         let path = req.path().to_string();
-
         Box::pin(async move {
-            // Vérification de l'AppState
             let db_interface = app_state.get_smart_db();
-
             lazy_static! {
                 static ref ADMIN_PATH_REGEX: Regex = Regex::new(r"/api/v\d+/admin").unwrap();
             }
 
-            // Si le chemin NE correspond PAS au pattern admin, on passe au service suivant
             if !ADMIN_PATH_REGEX.is_match(&path) {
                 let res = svc.call(req).await?;
                 return Ok(res.map_into_left_body());
             }
 
-            let jwt_option = get_jwt_from_request(req.request());
+            let jwt = get_jwt_from_request(req.request()).ok_or_else(|| {
+                actix_web::error::ErrorUnauthorized("Unauthorized: No JWT token provided.")
+            })?;
 
-            let jwt = match jwt_option {
-                Some(token) => token,
-                None => {
-                    let response = HttpResponse::Unauthorized()
-                        .body("Unauthorized: No JWT token provided.")
-                        .map_into_right_body();
-                    return Ok(req.into_response(response));
-                }
-            };
+            check_jwt_validity(&jwt, &db_interface)
+                .await
+                .map_err(actix_web::Error::from)?;
 
-            match check_jwt_validity(&jwt, &db_interface).await {
-                Ok(_) => {
-                    let user_id_str = match get_user_id_from_jwt(&jwt) {
-                        Some(id) => id,
-                        None => {
-                            let response = HttpResponse::Unauthorized()
-                                .body("Unauthorized: Invalid token payload.")
-                                .map_into_right_body();
-                            return Ok(req.into_response(response));
-                        }
-                    };
+            let user_id_str = get_user_id_from_jwt(&jwt).ok_or_else(|| {
+                actix_web::error::ErrorUnauthorized("Unauthorized: Invalid token payload.")
+            })?;
 
-                    let user_id = user_id_str.parse().unwrap_or(0);
-                    let view = IsAdminQueryView::new(user_id);
+            let user_id = user_id_str.parse().unwrap_or(0);
+            let view = IsAdminQueryView::new(user_id);
 
-                    // Note : si fetch_as/fetch_scalar prend &self, pas besoin de mut,
-                    // mais adaptez selon la signature de votre lib de DB
-                    if db_interface
-                        .fetch_scalar::<bool, _>(&view)
-                        .await
-                        .unwrap_or(false)
-                    {
-                        req.extensions_mut()
-                            .insert(AuthenticatedUser { id: user_id });
+            let is_admin = db_interface
+                .fetch_scalar::<bool, _>(&view)
+                .await
+                .map_err(actix_web::Error::from)?;
 
-                        let res = svc.call(req).await?;
-                        Ok(res.map_into_left_body())
-                    } else {
-                        let response = HttpResponse::Forbidden()
-                            .body("Forbidden: User is not an admin.")
-                            .map_into_right_body();
-                        Ok(req.into_response(response))
-                    }
-                }
-                Err(error) => {
-                    let response =
-                        match error {
-                            JWTCheckError::DatabaseError => HttpResponse::InternalServerError()
-                                .body("Internal server error: Database not initialized."),
-                            JWTCheckError::NoTokenProvided => HttpResponse::Unauthorized()
-                                .body("Unauthorized: No JWT token provided."),
-                            JWTCheckError::ExpiredToken => HttpResponse::Unauthorized()
-                                .body("Unauthorized: JWT token is expired."),
-                            JWTCheckError::InvalidToken => HttpResponse::Unauthorized()
-                                .body("Unauthorized: Invalid JWT token."),
-                            JWTCheckError::UnknownUser => {
-                                HttpResponse::NotFound().body("User not found.")
-                            }
-                        };
-                    Ok(req.into_response(response.map_into_right_body()))
-                }
+            if is_admin {
+                req.extensions_mut()
+                    .insert(AuthenticatedUser { id: user_id });
+                let res = svc.call(req).await?;
+                Ok(res.map_into_left_body())
+            } else {
+                Err(actix_web::error::ErrorForbidden(
+                    "Forbidden: User is not an admin.",
+                ))
             }
         })
     }

@@ -1,0 +1,142 @@
+cargo deny check advisories licenses
+error[rejected]: failed to satisfy license requirements
+   ┌─ /home/qtennerel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mailparse-0.16.1/Cargo.toml:37:12
+   │
+37 │ license = "0BSD"
+   │            ━━━━
+   │            │
+   │            rejected: license is not explicitly allowed
+   │
+   ├ 0BSD - BSD Zero Clause License:
+   ├   - OSI approved
+   ├ mailparse v0.16.1
+     └── resend-rs v0.32.0
+         └── mairie360_api_lib v1.0.0
+             └── (dev) mairie360_api_lib v1.0.0 (*)
+
+error[rejected]: failed to satisfy license requirements
+   ┌─ /home/qtennerel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/quoted_printable-0.5.2/Cargo.toml:40:12
+   │
+40 │ license = "0BSD"
+   │            ━━━━
+   │            │
+   │            rejected: license is not explicitly allowed
+   │
+   ├ 0BSD - BSD Zero Clause License:
+   ├   - OSI approved
+   ├ quoted_printable v0.5.2
+     └── mailparse v0.16.1
+         └── resend-rs v0.32.0
+             └── mairie360_api_lib v1.0.0
+                 └── (dev) mairie360_api_lib v1.0.0 (*)
+
+error[rejected]: failed to satisfy license requirements
+   ┌─ /home/qtennerel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/webpki-root-certs-1.0.9/Cargo.toml:26:12
+   │
+26 │ license = "CDLA-Permissive-2.0"
+   │            ━━━━━━━━━━━━━━━━━━━
+   │            │
+   │            rejected: license is not explicitly allowed
+   │
+   ├ CDLA-Permissive-2.0 - Community Data License Agreement Permissive 2.0:
+   ├   - No additional metadata available for license
+   ├ webpki-root-certs v1.0.9
+     └── rustls-platform-verifier v0.7.0
+         └── reqwest v0.13.4
+             ├── mairie360_api_lib v1.0.0
+             │   └── (dev) mairie360_api_lib v1.0.0 (*)
+             └── resend-rs v0.32.0
+                 └── mairie360_api_lib v1.0.0 (*)
+
+error[rejected]: failed to satisfy license requirements
+   ┌─ /home/qtennerel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/webpki-roots-1.0.9/Cargo.toml:26:12
+   │
+26 │ license = "CDLA-Permissive-2.0"
+   │            ━━━━━━━━━━━━━━━━━━━
+   │            │
+   │            rejected: license is not explicitly allowed
+   │
+   ├ CDLA-Permissive-2.0 - Community Data License Agreement Permissive 2.0:
+   ├   - No additional metadata available for license
+   ├ webpki-roots v1.0.9
+     └── sqlx-core v0.9.0
+         ├── sqlx v0.9.0
+         │   └── mairie360_api_lib v1.0.0
+         │       └── (dev) mairie360_api_lib v1.0.0 (*)
+         ├── sqlx-macros v0.9.0
+         │   └── sqlx v0.9.0 (*)
+         ├── sqlx-macros-core v0.9.0
+         │   └── sqlx-macros v0.9.0 (*)
+         └── sqlx-postgres v0.9.0
+             ├── sqlx v0.9.0 (*)
+             └── sqlx-macros-core v0.9.0 (*)
+
+error[rejected]: failed to satisfy license requirements
+   ┌─ /home/qtennerel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xxhash-rust-0.8.18/Cargo.toml:42:12
+   │
+42 │ license = "BSL-1.0"
+   │            ━━━━━━━
+   │            │
+   │            rejected: license is not explicitly allowed
+   │
+   ├ BSL-1.0 - Boost Software License 1.0:
+   ├   - OSI approved
+   ├   - FSF Free/Libre
+   ├ xxhash-rust v0.8.18
+     └── redis v1.6.0
+         ├── deadpool-redis v0.23.1
+         │   └── mairie360_api_lib v1.0.0
+         │       └── (dev) mairie360_api_lib v1.0.0 (*)
+         └── mairie360_api_lib v1.0.0 (*)
+
+error[vulnerability]: h2 unbounded empty DATA frames
+    ┌─ /home/qtennerel/epitech/EIP/APIs/API_lib/Cargo.lock:134:1
+    │
+134 │ h2 0.3.27 registry+https://github.com/rust-lang/crates.io-index
+    │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ security vulnerability detected
+    │
+    ├ ID: RUSTSEC-2026-0258
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0258
+    ├ The h2 crate, used internally by hyper, had a flaw that would accept and queue empty DATA frames without limit.
+      If streams were not actively drained, this could lead to unbounded memory usage, or a panic if the length overflows.
+
+      Low severity.
+
+      Patched in v0.4.16.
+    ├ Announcement: https://github.com/hyperium/hyper/security/advisories/GHSA-q83h-524g-xf6h
+    ├ Solution: Upgrade to >=0.4.16 (try `cargo update -p h2`)
+    ├ h2 v0.3.27
+      └── actix-http v3.13.4
+          └── actix-web v4.15.0
+              └── mairie360_api_lib v1.0.0
+                  └── (dev) mairie360_api_lib v1.0.0 (*)
+
+error[vulnerability]: Marvin Attack: potential key recovery through timing sidechannels
+    ┌─ /home/qtennerel/epitech/EIP/APIs/API_lib/Cargo.lock:279:1
+    │
+279 │ rsa 0.9.10 registry+https://github.com/rust-lang/crates.io-index
+    │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ security vulnerability detected
+    │
+    ├ ID: RUSTSEC-2023-0071
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2023-0071
+    ├ ### Impact
+      Due to a non-constant-time implementation, information about the private key is leaked through timing information which is observable over the network. An attacker may be able to use that information to recover the key.
+
+      ### Patches
+      No patch is yet available, however work is underway to migrate to a fully constant-time implementation.
+
+      ### Workarounds
+      The only currently available workaround is to avoid using the `rsa` crate in settings where attackers are able to observe timing information, e.g. local use on a non-compromised computer is fine.
+
+      ### References
+      This vulnerability was discovered as part of the "[Marvin Attack]", which revealed several implementations of RSA including OpenSSL had not properly mitigated timing sidechannel attacks.
+
+      [Marvin Attack]: https://people.redhat.com/~hkario/marvin/
+    ├ Announcement: https://github.com/RustCrypto/RSA/issues/626
+    ├ Solution: No safe upgrade is available!
+    ├ rsa v0.9.10
+      └── jsonwebtoken v11.0.0
+          └── mairie360_api_lib v1.0.0
+              └── (dev) mairie360_api_lib v1.0.0 (*)
+
+advisories FAILED, licenses FAILED

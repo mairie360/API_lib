@@ -6,7 +6,7 @@ on:
 
 jobs:
   CICD:
-    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@v1.11.0
+    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@v1.11.2
     with:
-      cicd_version: v1.11.0
+      cicd_version: v1.11.2
     secrets: inherit

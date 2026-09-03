@@ -4,6 +4,7 @@ use crate::{
 
 pub struct AppState {
     smart_db: SmartDatabase,
+    redis: Redis,
 }
 
 impl AppState {
@@ -17,12 +18,22 @@ impl AppState {
         println!("redis status: {:?}", redis_interface.is_connected().await);
         println!("pg status: {:?}", db_interface.is_connected().await);
 
-        let smart_db = SmartDatabase::new(db_interface, redis_interface);
+        // `Redis` encapsule un `Arc` interne : le clone partage le même pool et le
+        // même état de connexion que celui détenu par la `SmartDatabase`, les deux
+        // restent donc synchronisés.
+        let smart_db = SmartDatabase::new(db_interface, redis_interface.clone());
 
-        Self { smart_db }
+        Self {
+            smart_db,
+            redis: redis_interface,
+        }
     }
 
     pub fn get_smart_db(&self) -> &SmartDatabase {
         &self.smart_db
+    }
+
+    pub fn get_redis(&self) -> &Redis {
+        &self.redis
     }
 }

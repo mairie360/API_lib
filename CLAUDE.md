@@ -28,7 +28,11 @@ cargo audit
 cargo deny check advisories licenses
 ```
 
-CI runs via a shared reusable workflow (`mairie360/CICD/.github/workflows/back-lib-cicd.yml`, see `.github/workflows/cicd.yml`) — it is not defined in this repo.
+CI runs via a shared reusable workflow (`mairie360/CICD/.github/workflows/back-lib-cicd.yml`, pinned by tag in `.github/workflows/cicd.yml`) — it is not defined in this repo. `cargo audit` / `cargo deny` are run by that workflow; there is no `deny.toml` checked in here.
+
+### Build prerequisites
+
+`.cargo/config.toml` declares a private registry `mairie360` (index `github.com/mairie360/cargo-index`) and sets `net.git-fetch-with-cli = true`, so a fresh `cargo build` needs working `git` auth to GitHub (SSH key or credential helper). Pulling the `ghcr.io/mairie360/*` images used by the test suite likewise needs `ghcr.io` registry access.
 
 ## Tests
 
@@ -42,9 +46,9 @@ The `test-utils` feature (enabled in `[dev-dependencies]` on the crate itself) g
 
 ## Architecture
 
-The crate is organized as independent modules under `src/`, each re-exported from `lib.rs`:
+The crate is organized as independent modules under `src/`, each declared in `lib.rs`. One function/type per file, re-exported from the module's `mod.rs` (mirror this when adding files — see `jwt_manager` and `env_manager`). Test-only code is gated per-item with `#[cfg(any(test, feature = "test-utils"))]` (e.g. `email::mock_client`), not at the module level.
 
-- **`database`** — low-level Postgres access (`db_interface::Database`, built on `sqlx`). Callers implement the `ApiRequestDto` trait on their own DTOs (`query_sql()`, `query_params()`, optional `cache_key()`/`cache_ttl()`) instead of writing ad hoc queries; `Database` binds `QueryParam` enum values positionally and expects the SQL to return JSON-compatible rows (results are deserialized via `serde_json::from_value`, not `sqlx::FromRow`). `database::query_views` holds concrete `ApiRequestDto` implementations used internally by this crate (e.g. `IsAdminQueryView`, `HasAccessQueryView`) — they follow the `query_sql`/`query_params`/`Display` pattern and are the model to copy when adding a new internal query.
+- **`database`** — low-level Postgres access (`db_interface::Database`, built on `sqlx`). Callers implement the `ApiRequestDto` trait on their own DTOs (`query_sql()`, `query_params()`, optional `cache_key()`/`cache_ttl()`) instead of writing ad hoc queries; `Database` binds `QueryParam` enum values positionally and expects the SQL to return JSON-compatible rows (results are deserialized via `serde_json::from_value`, not `sqlx::FromRow`). `database::query_views` holds concrete `ApiRequestDto` implementations used internally by this crate (`IsAdminQueryView`, `HasAccessQueryView`, `DoesUserExistByIdQueryView`, `DoesUserExistByEmailQueryView`, `IsSessionTokenValidQueryView`) — they follow the `query_sql`/`query_params`/`Display` pattern and are the model to copy when adding a new internal query.
 - **`redis`** — `redis_interface::Redis` wraps `deadpool-redis`. Has plain (`get`/`set`/`delete`/`expire`) and `secure_*` variants; the `secure_*` variants are idempotent no-ops when the key already exists/doesn't exist (e.g. `secure_set` skips if the key is already present, `secure_delete`/`secure_expire` skip if absent).
 - **`smart_db`** — `SmartDatabase` composes `Database` + `Redis` into a cache-aside layer: on `fetch_one`/`fetch_all`/`fetch_scalar` it checks Redis first (via the DTO's `cache_key()`), falls back to Postgres on miss, then repopulates Redis (applying `cache_ttl()` if set). Redis failures are swallowed everywhere except the required Postgres read/write, which errors normally. `execute()` invalidates the DTO's `cache_key()` after a successful write. This is the primary interface API services use for DB access, not `Database` directly.
 - **`jwt_manager`** — one function per file (`generate_jwt`, `decode_jwt`, `check_jwt_validity`, `get_user_id_from_jwt`, `get_role_from_jwt`, `get_timeout_from_jwt`, `get_jwt_from_request`, `get_jwt_secret`, `get_jwt_timeout`). Secret/timeout come from the `JWT_SECRET`/`JWT_TIMEOUT` env vars. `check_jwt_validity` does decode + expiry check + a live `DoesUserExistByIdQueryView` lookup through `SmartDatabase` — it's the one function that hits the DB, the others are pure decode/encode.

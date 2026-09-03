@@ -20,6 +20,13 @@ impl SmartDatabase {
         Self { db, redis }
     }
 
+    /// Renvoie le client Redis utilisé par le cache-aside. `Redis` encapsule un
+    /// `Arc`, le clone renvoyé partage donc le même pool et le même état de
+    /// connexion que celui interrogé par `fetch_*`/`execute`.
+    pub fn get_redis(&self) -> Redis {
+        self.redis.clone()
+    }
+
     pub async fn execute<Q>(&self, query: Q) -> Result<(), ApiLibError>
     where
         Q: ApiRequestDto,

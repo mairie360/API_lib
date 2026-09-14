@@ -75,7 +75,7 @@ where
                 actix_web::error::ErrorUnauthorized("Unauthorized: No JWT token provided.")
             })?;
 
-            check_jwt_validity(&jwt, &db_interface)
+            check_jwt_validity(&jwt, db_interface)
                 .await
                 .map_err(actix_web::Error::from)?;
 

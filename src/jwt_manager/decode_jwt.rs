@@ -7,8 +7,10 @@ pub fn decode_jwt(token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
         jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidKeyFormat)
     })?;
 
-    let mut validation = Validation::default();
-    validation.leeway = 0; // <--- DÉSACTIVE LA TOLÉRANCE DE 60 SECONDES
+    let validation = Validation {
+        leeway: 0, // <--- DÉSACTIVE LA TOLÉRANCE DE 60 SECONDES
+        ..Default::default()
+    };
 
     let token_data = decode::<Claims>(token, &DecodingKey::from_secret(&secret), &validation)?;
     Ok(token_data.claims)

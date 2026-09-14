@@ -121,12 +121,11 @@ impl Redis {
             .map_err(|e| RedisError::Pool(e.to_string()))?;
 
         // Ajout explicite du turbofish ::<()> pour éviter l'erreur de typage
-        let result = conn
-            .del(key)
+        conn.del::<_, ()>(key)
             .await
             .map_err(|e| RedisError::Driver(e.to_string()))?;
 
-        Ok(result)
+        Ok(())
     }
 
     pub async fn expire(&self, key: &str, seconds: u64) -> Result<(), RedisError> {

@@ -290,7 +290,7 @@ mod queries_tests {
                     VALUES (50, $1, 'Test ACL Group') \
                     ON CONFLICT (id) DO NOTHING",
             )
-            .bind(alice_id as i32)
+            .bind(alice_id)
             .execute(&pool)
             .await
             .unwrap();
@@ -302,7 +302,7 @@ mod queries_tests {
                     (SELECT id FROM public.permissions WHERE action = 'read' AND resource_id = (SELECT id FROM public.resources WHERE name = 'groups') LIMIT 1)) \
                     ON CONFLICT DO NOTHING"
                 )
-                    .bind(alice_id as i32)
+                    .bind(alice_id)
                     .execute(&pool)
                     .await
                     .unwrap();
@@ -344,7 +344,7 @@ mod queries_tests {
                              VALUES (10, $1, 'Confidential Group') \
                              ON CONFLICT (id) DO NOTHING",
             )
-            .bind(alice_id as i32)
+            .bind(alice_id)
             .execute(&pool)
             .await
             .unwrap();

@@ -14,7 +14,7 @@ impl DoesUserExistByEmailQueryView {
     }
 
     pub fn get_email(&self) -> &str {
-        &self.params[0].as_text()
+        self.params[0].as_text()
     }
 }
 

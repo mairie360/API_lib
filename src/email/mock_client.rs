@@ -10,6 +10,13 @@ pub struct MockEmailClient {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
+impl Default for MockEmailClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
 impl MockEmailClient {
     pub fn new() -> Self {
         Self {

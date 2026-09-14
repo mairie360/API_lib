@@ -110,20 +110,16 @@ fn build_arguments(params: &[QueryParam]) -> Result<PgArguments, DbError> {
                 args.add(*v).map_err(|e| DbError::Internal(e.to_string()))?;
             }
             QueryParam::Uuid(v) => {
-                args.add(v.clone())
-                    .map_err(|e| DbError::Internal(e.to_string()))?;
+                args.add(*v).map_err(|e| DbError::Internal(e.to_string()))?;
             }
             QueryParam::DateTime(v) => {
-                args.add(v.clone())
-                    .map_err(|e| DbError::Internal(e.to_string()))?;
+                args.add(*v).map_err(|e| DbError::Internal(e.to_string()))?;
             }
             QueryParam::IpAddr(v) => {
-                args.add(v.clone())
-                    .map_err(|e| DbError::Internal(e.to_string()))?;
+                args.add(*v).map_err(|e| DbError::Internal(e.to_string()))?;
             }
             QueryParam::OptionI32(v) => {
-                args.add(v.clone())
-                    .map_err(|e| DbError::Internal(e.to_string()))?;
+                args.add(*v).map_err(|e| DbError::Internal(e.to_string()))?;
             }
         }
     }
@@ -180,7 +176,7 @@ impl Database {
     pub async fn execute<Q: ApiRequestDto>(&self, query: &Q) -> Result<(), DbError> {
         let pool = self.get_pool().await?;
         let params = query.query_params();
-        let args = build_arguments(&params)?;
+        let args = build_arguments(params)?;
 
         sqlx::query_with(sqlx::AssertSqlSafe(query.query_sql()), args)
             .execute(&pool)
@@ -197,7 +193,7 @@ impl Database {
         let pool = self.get_pool().await?;
 
         let params = query.query_params();
-        let args = build_arguments(&params)?;
+        let args = build_arguments(params)?;
 
         let json_val: serde_json::Value =
             sqlx::query_scalar_with(sqlx::AssertSqlSafe(query.query_sql()), args)
@@ -218,7 +214,7 @@ impl Database {
         let pool = self.get_pool().await?;
 
         let params = query.query_params();
-        let args = build_arguments(&params)?;
+        let args = build_arguments(params)?;
 
         // Récupère une liste de valeurs JSON (une par ligne)
         let json_values: Vec<serde_json::Value> =
@@ -244,7 +240,7 @@ impl Database {
     {
         let pool = self.get_pool().await?;
         let params = query.query_params();
-        let args = build_arguments(&params)?;
+        let args = build_arguments(params)?;
 
         // Utilisation de query_scalar_with pour exécuter la requête avec les arguments dynamiques
         let result = sqlx::query_scalar_with(sqlx::AssertSqlSafe(query.query_sql()), args)

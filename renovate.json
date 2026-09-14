@@ -1,5 +1,14 @@
 {
   "extends": [
     "github>mairie360/renovate-config"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^src/test_setup/db_setup\\.rs$"],
+      "matchStrings": [
+        "// renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+const DEFAULT_DB_VERSION: &str = \"(?<currentValue>.*?)\";"
+      ]
+    }
   ]
 }

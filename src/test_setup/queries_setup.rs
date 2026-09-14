@@ -10,12 +10,18 @@ pub static BOB_ID: OnceCell<i32> = OnceCell::const_new();
 pub static ADMIN_ID: OnceCell<i32> = OnceCell::const_new();
 pub static GROUP_OWNER_ID: OnceCell<i32> = OnceCell::const_new();
 
+/// Démarre le conteneur Postgres de test et renvoie le conteneur, un client et l'URL.
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, String) {
     let (node, _) = start_postgres_container().await;
     let host = "127.0.0.1";
     let port = 5432;
 
-    let postgres_url = format!("postgres://postgres:postgres@{}:{}/postgres", host, port);
+    let postgres_url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
 
     env::set_var("DB_HOST", host);
     env::set_var("DB_PORT", port.to_string());
@@ -26,7 +32,7 @@ pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, St
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            eprintln!("connection error: {e}");
         }
     });
 
@@ -34,6 +40,11 @@ pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, St
 }
 
 /// 2. Setup pour Alice (Utilisateur actif)
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn setup_active_session(client: &Client) {
     let row = client.query_one("
         INSERT INTO users (first_name, last_name, email, password, phone_number, status, is_archived)
@@ -59,6 +70,11 @@ pub async fn setup_active_session(client: &Client) {
 }
 
 /// 3. Setup Token expiré (réutilise Alice)
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn setup_expired_session(client: &Client) {
     let id = *ALICE_ID.get().expect("Alice ID not initialized");
 
@@ -69,6 +85,11 @@ pub async fn setup_expired_session(client: &Client) {
 }
 
 /// 4. Setup pour Bob (Utilisateur qui finit archivé)
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn setup_archived_user_test(client: &Client) {
     let row = client.query_one("
         INSERT INTO users (first_name, last_name, email, password, phone_number, status, is_archived)
@@ -103,6 +124,11 @@ pub async fn setup_archived_user_test(client: &Client) {
 }
 
 /// 5. Setup des données d'accès (Utilise un nouvel utilisateur pour les groupes)
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn setup_access_control_data(client: &Client) {
     let alice_id = *ALICE_ID.get().expect("Alice ID missing");
     let bob_id = *BOB_ID.get().expect("Bob ID missing");
@@ -181,6 +207,12 @@ static SHARED_DB: OnceCell<(ContainerAsync<GenericImage>, String)> = OnceCell::c
 //     (node, url)
 // }
 
+/// Renvoie la base de test partagée par tous les tests du processus (créée au premier appel).
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn get_shared_db() -> &'static (ContainerAsync<GenericImage>, String) {
     SHARED_DB
         .get_or_init(|| async {

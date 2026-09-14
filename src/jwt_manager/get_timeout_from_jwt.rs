@@ -1,8 +1,6 @@
 use super::decode_jwt::decode_jwt;
 
+#[must_use]
 pub fn get_timeout_from_jwt(jwt: &str) -> Option<usize> {
-    match decode_jwt(jwt) {
-        Ok(claims) => Some(claims.expiration()),
-        Err(_) => None,
-    }
+    decode_jwt(jwt).ok().map(|claims| claims.expiration())
 }

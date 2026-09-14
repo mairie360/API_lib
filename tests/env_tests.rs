@@ -1,5 +1,4 @@
 use mairie360_api_lib::env_manager::{get_critical_env_var, get_env_var};
-use once_cell::sync::Lazy;
 use std::env;
 
 /**
@@ -7,7 +6,7 @@ use std::env;
  * It includes tests for getting environment variables and ensuring
  * critical environment variables are set.
  */
-static INIT: Lazy<()> = Lazy::new(|| {
+static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
     // This code runs ONCE before any test
     unsafe { env::set_var("MY_KEY", "global_value") };
     println!("Global setup done");
@@ -19,7 +18,7 @@ static INIT: Lazy<()> = Lazy::new(|| {
  */
 fn setup() {
     // Force INIT to run
-    Lazy::force(&INIT);
+    std::sync::LazyLock::force(&INIT);
 }
 
 /**
@@ -69,6 +68,6 @@ mod env_tests {
     #[should_panic(expected = "Critical environment variable 'NON_EXISTENT_KEY' is not set")]
     fn test_get_critical_env_var_not_found() {
         setup();
-        get_critical_env_var("NON_EXISTENT_KEY");
+        let _ = get_critical_env_var("NON_EXISTENT_KEY");
     }
 }

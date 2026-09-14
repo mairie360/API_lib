@@ -21,10 +21,15 @@ pub struct TestDbConfig {
 }
 
 /// Lance les migrations Liquibase via ton image personnalisée
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn run_migrations(_container: &ContainerAsync<GenericImage>) {
     let liquibase_url = "jdbc:postgresql://127.0.0.1:5432/postgres";
 
-    println!("🚀 Liquibase connectant à : {}", liquibase_url);
+    println!("🚀 Liquibase connectant à : {liquibase_url}");
 
     let liquibase_node = GenericImage::new("ghcr.io/mairie360/liquibase-migrations", &db_version())
         .with_network("host")
@@ -59,6 +64,11 @@ pub async fn run_migrations(_container: &ContainerAsync<GenericImage>) {
 }
 
 /// Démarre un conteneur Postgres standard
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn start_postgres_container() -> (ContainerAsync<GenericImage>, TestDbConfig) {
     let node = GenericImage::new("ghcr.io/mairie360/database", &db_version())
         .with_network("host") // Mode host pour la simplicité sous Linux

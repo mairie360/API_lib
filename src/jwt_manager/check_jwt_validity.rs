@@ -3,6 +3,15 @@ use crate::jwt_manager::decode_jwt::decode_jwt;
 use crate::jwt_manager::error::JWTCheckError;
 use crate::smart_db::SmartDatabase;
 
+/// Vérifie qu'un JWT est présent, valide, non expiré et qu'il désigne un utilisateur existant.
+///
+/// # Errors
+///
+/// - [`JWTCheckError::NoTokenProvided`] si le jeton est vide ;
+/// - [`JWTCheckError::ExpiredToken`] si le jeton est expiré ;
+/// - [`JWTCheckError::InvalidToken`] si le jeton est illisible ou si son `user_id` n'est pas un entier ;
+/// - [`JWTCheckError::DatabaseError`] si la vérification en base échoue ;
+/// - [`JWTCheckError::UnknownUser`] si l'utilisateur n'existe pas.
 pub async fn check_jwt_validity(
     jwt: &str,
     db_interface: &SmartDatabase,
@@ -14,7 +23,7 @@ pub async fn check_jwt_validity(
 
     // 1. Décodage et distinction de l'expiration vs token invalide
     let claims = decode_jwt(jwt).map_err(|err| {
-        eprintln!("JWT decode error: {:?}", err);
+        eprintln!("JWT decode error: {err:?}");
         if matches!(
             err.kind(),
             jsonwebtoken::errors::ErrorKind::ExpiredSignature
@@ -38,12 +47,12 @@ pub async fn check_jwt_validity(
         .fetch_scalar::<bool, _>(&query_view)
         .await
         .map_err(|e| {
-            eprintln!("Database query error: {}", e);
+            eprintln!("Database query error: {e}");
             JWTCheckError::DatabaseError
         })?;
 
     if !exist {
-        eprintln!("User does not exist with ID: {}", user_id_str);
+        eprintln!("User does not exist with ID: {user_id_str}");
         return Err(JWTCheckError::UnknownUser);
     }
 

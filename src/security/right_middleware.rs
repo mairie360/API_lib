@@ -15,6 +15,15 @@ pub struct AccessCheckConfig {
     pub id_param_pattern: Option<&'static str>,
 }
 
+/// Middleware vérifiant, via `check_access` en base, que l'utilisateur authentifié a le droit
+/// d'effectuer `action` sur la ressource décrite par l'`AccessCheckConfig` de la route.
+///
+/// # Errors
+///
+/// - 500 si l'`AccessCheckConfig` ou l'`AppState` est absent de la route, ou si la base échoue ;
+/// - 401 si aucun utilisateur authentifié n'a été injecté ;
+/// - 400 si l'identifiant de l'URL n'est pas un entier ;
+/// - 404 si la ressource n'existe pas, 403 si les droits sont insuffisants.
 pub async fn access_guard_middleware(
     req: ServiceRequest,
     next: Next<BoxBody>,

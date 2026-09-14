@@ -2,6 +2,12 @@ use super::get_jwt_secret::get_jwt_secret;
 use super::jwt_claims::Claims;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 
+/// Décode et valide un JWT (signature et expiration, sans tolérance).
+///
+/// # Errors
+///
+/// Renvoie une erreur `jsonwebtoken` si `JWT_SECRET` n'est pas défini, si la signature est
+/// invalide ou si le jeton est expiré.
 pub fn decode_jwt(token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
     let secret: Vec<u8> = get_jwt_secret().map_err(|_e| {
         jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidKeyFormat)

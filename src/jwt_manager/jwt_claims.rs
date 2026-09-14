@@ -9,7 +9,7 @@ pub struct Claims {
 
 impl Claims {
     pub fn new(user_id: &str, role: &str, expiration: usize) -> Self {
-        Claims {
+        Self {
             sub: user_id.to_string(),
             role: role.to_string(),
             exp: expiration,
@@ -20,7 +20,7 @@ impl Claims {
         &self.sub
     }
 
-    pub fn expiration(&self) -> usize {
+    pub const fn expiration(&self) -> usize {
         self.exp
     }
 

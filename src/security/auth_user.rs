@@ -14,8 +14,8 @@ impl FromRequest for AuthenticatedUser {
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         // Comme ton Middleware a DEJA validé le token et l'a mis dans les extensions :
-        if let Some(user) = req.extensions().get::<AuthenticatedUser>() {
-            return ready(Ok(AuthenticatedUser { id: user.id }));
+        if let Some(user) = req.extensions().get::<Self>() {
+            return ready(Ok(Self { id: user.id }));
         }
 
         // Si on arrive ici, c'est que le middleware n'a pas fait son job

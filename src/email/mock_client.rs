@@ -18,7 +18,8 @@ impl Default for MockEmailClient {
 
 #[cfg(any(test, feature = "test-utils"))]
 impl MockEmailClient {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             sent_emails: std::sync::Mutex::new(Vec::new()),
         }

@@ -1,4 +1,4 @@
-use crate::database::db_interface::{ApiRequestDto, QueryParam};
+use crate::database::db_interface::{id_from_sql, id_to_sql, ApiRequestDto, QueryParam};
 use std::fmt::Display;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -7,13 +7,15 @@ pub struct IsAdminQueryView {
 }
 
 impl IsAdminQueryView {
+    #[must_use]
     pub fn new(user_id: u64) -> Self {
         Self {
-            params: vec![QueryParam::I32(user_id as i32)],
+            params: vec![QueryParam::I32(id_to_sql(user_id))],
         }
     }
+    #[must_use]
     pub fn get_user_id(&self) -> u64 {
-        self.params[0].as_i32() as u64
+        id_from_sql(self.params[0].as_i32())
     }
 }
 

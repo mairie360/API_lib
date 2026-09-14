@@ -27,20 +27,18 @@ pub enum DbError {
 impl From<sqlx::Error> for DbError {
     fn from(err: sqlx::Error) -> Self {
         match &err {
-            sqlx::Error::RowNotFound => DbError::NotFound,
+            sqlx::Error::RowNotFound => Self::NotFound,
             sqlx::Error::Database(db_err) => {
                 if let Some(code) = db_err.code() {
                     match code.as_ref() {
-                        "23505" => return DbError::UniqueViolation(db_err.message().to_string()),
-                        "23503" => {
-                            return DbError::ForeignKeyViolation(db_err.message().to_string())
-                        }
+                        "23505" => return Self::UniqueViolation(db_err.message().to_string()),
+                        "23503" => return Self::ForeignKeyViolation(db_err.message().to_string()),
                         _ => {}
                     }
                 }
-                DbError::Sqlx(err)
+                Self::Sqlx(err)
             }
-            _ => DbError::Sqlx(err),
+            _ => Self::Sqlx(err),
         }
     }
 }
@@ -48,10 +46,10 @@ impl From<sqlx::Error> for DbError {
 impl ResponseError for DbError {
     fn status_code(&self) -> StatusCode {
         match self {
-            DbError::NotFound => StatusCode::NOT_FOUND,
-            DbError::UniqueViolation(_) => StatusCode::CONFLICT,
-            DbError::ForeignKeyViolation(_) => StatusCode::BAD_REQUEST,
-            DbError::MappingError(_) | DbError::Internal(_) | DbError::Sqlx(_) => {
+            Self::NotFound => StatusCode::NOT_FOUND,
+            Self::UniqueViolation(_) => StatusCode::CONFLICT,
+            Self::ForeignKeyViolation(_) => StatusCode::BAD_REQUEST,
+            Self::MappingError(_) | Self::Internal(_) | Self::Sqlx(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         }
@@ -61,43 +59,40 @@ impl ResponseError for DbError {
         // --- LOGS AUTOMATIQUES SELON LA CRITICITÉ ---
         match self {
             // Cas bénins / erreurs utilisateurs : simple trace informative (ou rien du tout)
-            DbError::NotFound => {
+            Self::NotFound => {
                 // Pas besoin de logger en erreur, c'est un comportement utilisateur classique
             }
-            DbError::UniqueViolation(msg) => {
+            Self::UniqueViolation(msg) => {
                 // Optionnel : un avertissement pour savoir qu'un doublon a été tenté
-                eprintln!("[AVERTISSEMENT DB] Tentative de doublon : {}", msg);
+                eprintln!("[AVERTISSEMENT DB] Tentative de doublon : {msg}");
             }
-            DbError::ForeignKeyViolation(msg) => {
-                eprintln!("[AVERTISSEMENT DB] Référence invalide : {}", msg);
+            Self::ForeignKeyViolation(msg) => {
+                eprintln!("[AVERTISSEMENT DB] Référence invalide : {msg}");
             }
 
             // Vrais problèmes techniques (Erreurs 500) : Log critique indispensable
-            DbError::MappingError(msg) => {
-                eprintln!(
-                    "[ERREUR CRITIQUE DB] Échec du mapping JSON vers DTO : {}",
-                    msg
-                );
+            Self::MappingError(msg) => {
+                eprintln!("[ERREUR CRITIQUE DB] Échec du mapping JSON vers DTO : {msg}");
             }
-            DbError::Internal(msg) => {
-                eprintln!("[ERREUR CRITIQUE DB] Erreur interne : {}", msg);
+            Self::Internal(msg) => {
+                eprintln!("[ERREUR CRITIQUE DB] Erreur interne : {msg}");
             }
-            DbError::Sqlx(err) => {
-                eprintln!("[ERREUR CRITIQUE DB] Erreur de pilote SQLx : {:?}", err);
+            Self::Sqlx(err) => {
+                eprintln!("[ERREUR CRITIQUE DB] Erreur de pilote SQLx : {err:?}");
             }
         }
 
         // --- GÉNÉRATION DE LA RÉPONSE HTTP ---
         match self {
-            DbError::NotFound => HttpResponse::NotFound().body("Ressource non trouvée"),
-            DbError::UniqueViolation(msg) => {
-                HttpResponse::Conflict().body(format!("Conflit de données : {}", msg))
+            Self::NotFound => HttpResponse::NotFound().body("Ressource non trouvée"),
+            Self::UniqueViolation(msg) => {
+                HttpResponse::Conflict().body(format!("Conflit de données : {msg}"))
             }
-            DbError::ForeignKeyViolation(msg) => {
-                HttpResponse::BadRequest().body(format!("Référence invalide : {}", msg))
+            Self::ForeignKeyViolation(msg) => {
+                HttpResponse::BadRequest().body(format!("Référence invalide : {msg}"))
             }
-            DbError::MappingError(msg) => {
-                HttpResponse::InternalServerError().body(format!("Erreur de mapping : {}", msg))
+            Self::MappingError(msg) => {
+                HttpResponse::InternalServerError().body(format!("Erreur de mapping : {msg}"))
             }
             _ => HttpResponse::InternalServerError().body("Erreur interne de la base de données"),
         }

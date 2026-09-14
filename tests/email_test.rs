@@ -61,7 +61,8 @@ mod tests {
             Some("https://mondomaine.com/auth/reset?token=abc-123")
         );
         assert_eq!(
-            vars.get("expires_in_minutes").and_then(|v| v.as_u64()),
+            vars.get("expires_in_minutes")
+                .and_then(resend_rs::Value::as_u64),
             Some(30)
         );
 
@@ -75,7 +76,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap().id, EmailId::new("fake-email-id-1234"));
 
-        let sent = mock_client.sent_emails.lock().unwrap();
+        let sent = mock_client.sent_emails.lock().unwrap().clone();
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].0, vec!["test@example.com".to_string()]);
     }

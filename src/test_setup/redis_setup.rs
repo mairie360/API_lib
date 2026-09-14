@@ -12,6 +12,11 @@ pub struct RedisTestConfig {
 }
 
 /// Démarre un conteneur Redis et attend qu'il soit prêt
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
 pub async fn start_redis_container() -> (ContainerAsync<GenericImage>, RedisTestConfig) {
     let node = GenericImage::new("redis", "7.2.4")
         .with_exposed_port(ContainerPort::Tcp(6379))
@@ -22,18 +27,24 @@ pub async fn start_redis_container() -> (ContainerAsync<GenericImage>, RedisTest
 
     let host = node.get_host().await.unwrap().to_string();
     let port = node.get_host_port_ipv4(6379).await.unwrap();
-    let url = format!("redis://{}:{}", host, port);
+    let url = format!("redis://{host}:{port}");
 
     (node, RedisTestConfig { url, host, port })
 }
 
-/// Configure la variable d'environnement pour le RedisManager de la lib
+/// Configure la variable d'environnement pour le `RedisManager` de la lib
 pub fn set_redis_env_var(config: &RedisTestConfig) {
     env::set_var("REDIS_URL", &config.url);
 }
 
 /// Helper pour obtenir une connexion directe (pour les tests de fonctions simples)
-pub async fn get_redis_connection(config: &RedisTestConfig) -> redis::Connection {
+///
+/// # Panics
+///
+/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
+/// continuer sans son environnement.
+#[must_use]
+pub fn get_redis_connection(config: &RedisTestConfig) -> redis::Connection {
     let client = Client::open(config.url.as_str()).expect("Invalid Redis URL");
     client.get_connection().expect("Failed to connect to Redis")
 }

@@ -23,6 +23,7 @@ pub struct ResendClient {
 
 impl ResendClient {
     // Le constructeur redevient synchrone puisqu'on ne fait plus d'appel API au démarrage
+    #[must_use]
     pub fn new(api_key: &str, from: &str) -> Self {
         let client = Resend::new(api_key);
         Self {

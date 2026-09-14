@@ -26,14 +26,14 @@ pub enum ApiLibError {
 impl ResponseError for ApiLibError {
     fn error_response(&self) -> HttpResponse {
         match self {
-            ApiLibError::Database(err) => err.error_response(),
-            ApiLibError::Redis(err) => err.error_response(),
-            ApiLibError::Jwt(err) => err.error_response(),
-            ApiLibError::Email(_) => {
+            Self::Database(err) => err.error_response(),
+            Self::Redis(err) => err.error_response(),
+            Self::Jwt(err) => err.error_response(),
+            Self::Email(_) => {
                 HttpResponse::InternalServerError().body("Échec de l'envoi de l'e-mail")
             }
-            ApiLibError::Serialization(err) => {
-                HttpResponse::BadRequest().body(format!("Format JSON invalide : {}", err))
+            Self::Serialization(err) => {
+                HttpResponse::BadRequest().body(format!("Format JSON invalide : {err}"))
             }
         }
     }

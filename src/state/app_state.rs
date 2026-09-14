@@ -29,11 +29,13 @@ impl AppState {
         }
     }
 
-    pub fn get_smart_db(&self) -> &SmartDatabase {
+    #[must_use]
+    pub const fn get_smart_db(&self) -> &SmartDatabase {
         &self.smart_db
     }
 
-    pub fn get_redis(&self) -> &Redis {
+    #[must_use]
+    pub const fn get_redis(&self) -> &Redis {
         &self.redis
     }
 }

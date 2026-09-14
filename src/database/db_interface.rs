@@ -22,61 +22,108 @@ pub enum QueryParam {
 }
 
 impl QueryParam {
+    /// # Panics
+    ///
+    /// Panique si le paramètre n'est pas de la variante `QueryParam::Text`.
+    #[must_use]
     pub fn as_text(&self) -> &str {
         match self {
-            QueryParam::Text(s) => s,
-            _ => panic!("Expected Text, got {:?}", self),
+            Self::Text(s) => s,
+            _ => panic!("Expected Text, got {self:?}"),
         }
     }
 
+    /// # Panics
+    ///
+    /// Panique si le paramètre n'est pas de la variante `QueryParam::I32`.
+    #[must_use]
     pub fn as_i32(&self) -> i32 {
         match self {
-            QueryParam::I32(v) => *v,
-            _ => panic!("Expected I32, got {:?}", self),
+            Self::I32(v) => *v,
+            _ => panic!("Expected I32, got {self:?}"),
         }
     }
 
+    /// # Panics
+    ///
+    /// Panique si le paramètre n'est pas de la variante `QueryParam::I64`.
+    #[must_use]
     pub fn as_i64(&self) -> i64 {
         match self {
-            QueryParam::I64(v) => *v,
-            _ => panic!("Expected I64, got {:?}", self),
+            Self::I64(v) => *v,
+            _ => panic!("Expected I64, got {self:?}"),
         }
     }
 
+    /// # Panics
+    ///
+    /// Panique si le paramètre n'est pas de la variante `QueryParam::Bool`.
+    #[must_use]
     pub fn as_bool(&self) -> bool {
         match self {
-            QueryParam::Bool(v) => *v,
-            _ => panic!("Expected Bool, got {:?}", self),
+            Self::Bool(v) => *v,
+            _ => panic!("Expected Bool, got {self:?}"),
         }
     }
 
+    /// # Panics
+    ///
+    /// Panique si le paramètre n'est pas de la variante `QueryParam::Uuid`.
+    #[must_use]
     pub fn as_uuid(&self) -> Uuid {
         match self {
-            QueryParam::Uuid(v) => *v,
-            _ => panic!("Expected Uuid, got {:?}", self),
+            Self::Uuid(v) => *v,
+            _ => panic!("Expected Uuid, got {self:?}"),
         }
     }
 
+    /// # Panics
+    ///
+    /// Panique si le paramètre n'est pas de la variante `QueryParam::DateTime`.
+    #[must_use]
     pub fn as_datetime(&self) -> DateTime<Utc> {
         match self {
-            QueryParam::DateTime(v) => *v,
-            _ => panic!("Expected DateTime, got {:?}", self),
+            Self::DateTime(v) => *v,
+            _ => panic!("Expected DateTime, got {self:?}"),
         }
     }
 
+    /// # Panics
+    ///
+    /// Panique si le paramètre n'est pas de la variante `QueryParam::IpAddr`.
+    #[must_use]
     pub fn as_ipaddr(&self) -> IpAddr {
         match self {
-            QueryParam::IpAddr(v) => *v,
-            _ => panic!("Expected IpAddr, got {:?}", self),
+            Self::IpAddr(v) => *v,
+            _ => panic!("Expected IpAddr, got {self:?}"),
         }
     }
 
+    /// # Panics
+    ///
+    /// Panique si le paramètre n'est pas de la variante `QueryParam::OptionI32`.
+    #[must_use]
     pub fn as_option_i32(&self) -> Option<i32> {
         match self {
-            QueryParam::OptionI32(v) => *v,
-            _ => panic!("Expected OptionI32, got {:?}", self),
+            Self::OptionI32(v) => *v,
+            _ => panic!("Expected OptionI32, got {self:?}"),
         }
     }
+}
+
+/// Convertit un identifiant d'API (`u64`) en identifiant SQL `INT4`.
+///
+/// Les valeurs au-delà de `i32::MAX` saturent au lieu de boucler : un `as i32` transformerait
+/// par exemple `2^32 + 1` en `1`, c'est-à-dire en l'identifiant d'une autre ligne.
+#[must_use]
+pub fn id_to_sql(id: u64) -> i32 {
+    i32::try_from(id).unwrap_or(i32::MAX)
+}
+
+/// Convertit un identifiant SQL `INT4` en identifiant d'API (`u64`) ; une valeur négative donne `0`.
+#[must_use]
+pub fn id_from_sql(id: i32) -> u64 {
+    u64::try_from(id).unwrap_or_default()
 }
 
 // Le trait que l'API va implémenter sur ses DTOs
@@ -145,7 +192,7 @@ impl Database {
                 pool: match PgPool::connect(database_url).await {
                     Ok(pool) => Mutex::new(Some(pool)),
                     Err(e) => {
-                        eprintln!("Failed to connect to database: {}", e);
+                        eprintln!("Failed to connect to database: {e}");
                         Mutex::new(None)
                     }
                 },
@@ -169,10 +216,16 @@ impl Database {
             .map_err(|_| DbError::Sqlx(sqlx::Error::PoolClosed))?;
 
         *guard = Some(pool.clone());
+        drop(guard);
         Ok(pool)
     }
 
-    // Méthode interne partagée pour binder et exécuter la requête SQL brute
+    /// Exécute une requête d'écriture (`INSERT`, `UPDATE`, `DELETE`) sans lire de résultat.
+    ///
+    /// # Errors
+    ///
+    /// Renvoie une [`DbError`] si la connexion au pool échoue, si un paramètre ne peut pas être
+    /// lié ou si Postgres rejette la requête.
     pub async fn execute<Q: ApiRequestDto>(&self, query: &Q) -> Result<(), DbError> {
         let pool = self.get_pool().await?;
         let params = query.query_params();
@@ -185,7 +238,13 @@ impl Database {
         Ok(())
     }
 
-    /// L'API demande un seul résultat (équivalent à fetch_one de sqlx)
+    /// L'API demande un seul résultat (équivalent à `fetch_one` de sqlx)
+    ///
+    /// # Errors
+    ///
+    /// Renvoie une [`DbError`] si la connexion au pool échoue, si un paramètre ne peut pas être
+    /// lié ou si Postgres rejette la requête ; `DbError::NotFound` si aucune ligne
+    /// n'est renvoyée et `DbError::MappingError` si le JSON ne correspond pas à `T`.
     pub async fn fetch_one<T, Q: ApiRequestDto>(&self, query: &Q) -> Result<T, DbError>
     where
         T: DeserializeOwned,
@@ -207,6 +266,13 @@ impl Database {
         Ok(item)
     }
 
+    /// Renvoie toutes les lignes, chacune décodée depuis une colonne JSON.
+    ///
+    /// # Errors
+    ///
+    /// Renvoie une [`DbError`] si la connexion au pool échoue, si un paramètre ne peut pas être
+    /// lié ou si Postgres rejette la requête ; `DbError::MappingError` si une ligne ne
+    /// correspond pas à `T`.
     pub async fn fetch_all<T, Q: ApiRequestDto>(&self, query: &Q) -> Result<Vec<T>, DbError>
     where
         T: DeserializeOwned,
@@ -232,6 +298,13 @@ impl Database {
         Ok(items)
     }
 
+    /// Renvoie une valeur scalaire unique décodée directement par sqlx.
+    ///
+    /// # Errors
+    ///
+    /// Renvoie une [`DbError`] si la connexion au pool échoue, si un paramètre ne peut pas être
+    /// lié ou si Postgres rejette la requête ; `DbError::NotFound` si aucune ligne
+    /// n'est renvoyée.
     pub async fn fetch_scalar<T, Q>(&self, query: &Q) -> Result<T, DbError>
     where
         Q: ApiRequestDto,

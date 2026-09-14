@@ -369,7 +369,7 @@ mod admin_path_tests {
         let resp = test::call_service(&app, req).await;
 
         // Le test passe si le statut est OK ou FORBIDDEN (Alice peut être admin ou non)
-        assert!(resp.status() == StatusCode::OK);
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[actix_web::test]

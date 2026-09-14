@@ -8,5 +8,5 @@ jobs:
   CICD:
     uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@v2.1.1
     with:
-      cicd_version: v1.11.5
+      cicd_version: v1.15.1
     secrets: inherit

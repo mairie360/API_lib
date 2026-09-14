@@ -1,6 +1,6 @@
 [alias]
-# This alias checks the lint
-lint_check = "fmt --all -- --check"
+# This alias checks the lint (clippy au niveau le plus strict, voir [lints.clippy] dans Cargo.toml)
+lint_check = "clippy --all-targets --all-features -- -D warnings"
 
 # This alias formats the code
 lint_fix = "fmt --all"

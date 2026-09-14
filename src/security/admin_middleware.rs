@@ -10,10 +10,13 @@ use actix_web::{
     Error, HttpMessage,
 };
 use futures_util::future::LocalBoxFuture;
-use lazy_static::lazy_static;
 use regex::Regex;
 use std::future::{ready, Ready};
 use std::rc::Rc;
+use std::sync::LazyLock;
+
+static ADMIN_PATH_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"/api/v\d+/admin").expect("regex des routes admin invalide"));
 
 pub struct AdminMiddleware;
 
@@ -62,9 +65,6 @@ where
         let path = req.path().to_string();
         Box::pin(async move {
             let db_interface = app_state.get_smart_db();
-            lazy_static! {
-                static ref ADMIN_PATH_REGEX: Regex = Regex::new(r"/api/v\d+/admin").unwrap();
-            }
 
             if !ADMIN_PATH_REGEX.is_match(&path) {
                 let res = svc.call(req).await?;
@@ -75,7 +75,7 @@ where
                 actix_web::error::ErrorUnauthorized("Unauthorized: No JWT token provided.")
             })?;
 
-            check_jwt_validity(&jwt, &db_interface)
+            check_jwt_validity(&jwt, db_interface)
                 .await
                 .map_err(actix_web::Error::from)?;
 

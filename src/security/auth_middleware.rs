@@ -74,7 +74,7 @@ where
             })?;
 
             // L'erreur JWT est convertie automatiquement en actix_web::Error grâce à ResponseError
-            check_jwt_validity(&jwt, &db_interface)
+            check_jwt_validity(&jwt, db_interface)
                 .await
                 .map_err(actix_web::Error::from)?;
 

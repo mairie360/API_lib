@@ -24,26 +24,20 @@ impl ResponseError for RedisError {
     // 2. Génération de la réponse avec logs automatiques selon la nature de l'erreur
     fn error_response(&self) -> HttpResponse {
         match self {
-            RedisError::Pool(msg) => {
-                eprintln!(
-                    "[ERREUR CRITIQUE REDIS] Échec du pool de connexions : {}",
-                    msg
-                );
+            Self::Pool(msg) => {
+                eprintln!("[ERREUR CRITIQUE REDIS] Échec du pool de connexions : {msg}");
             }
-            RedisError::Driver(msg) => {
-                eprintln!("[ERREUR CRITIQUE REDIS] Erreur du driver lors de l'exécution d'une commande : {}", msg);
+            Self::Driver(msg) => {
+                eprintln!("[ERREUR CRITIQUE REDIS] Erreur du driver lors de l'exécution d'une commande : {msg}");
             }
-            RedisError::Internal(msg) => {
-                eprintln!("[ERREUR CRITIQUE REDIS] Erreur interne : {}", msg);
+            Self::Internal(msg) => {
+                eprintln!("[ERREUR CRITIQUE REDIS] Erreur interne : {msg}");
             }
-            RedisError::Value(msg) => {
-                eprintln!(
-                    "[AVERTISSEMENT REDIS] Problème de désérialisation ou de valeur : {}",
-                    msg
-                );
+            Self::Value(msg) => {
+                eprintln!("[AVERTISSEMENT REDIS] Problème de désérialisation ou de valeur : {msg}");
             }
         }
 
-        HttpResponse::InternalServerError().body(format!("Erreur cache : {}", self))
+        HttpResponse::InternalServerError().body(format!("Erreur cache : {self}"))
     }
 }

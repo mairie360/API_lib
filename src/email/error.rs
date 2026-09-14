@@ -18,12 +18,9 @@ impl ResponseError for EmailError {
     // 2. Génération de la réponse HTTP avec log automatique de l'incident
     fn error_response(&self) -> HttpResponse {
         match self {
-            EmailError::Resend(err) => {
+            Self::Resend(err) => {
                 // Log critique indispensable pour tracer les pannes du service tiers
-                eprintln!(
-                    "[ERREUR CRITIQUE EMAIL] Échec du service Resend : {:?}",
-                    err
-                );
+                eprintln!("[ERREUR CRITIQUE EMAIL] Échec du service Resend : {err:?}");
             }
         }
 

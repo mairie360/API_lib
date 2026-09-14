@@ -2,7 +2,7 @@ use mairie360_api_lib::{state::AppState, test_setup::queries_setup::get_shared_d
 
 use std::env;
 
-static INIT: once_cell::sync::Lazy<()> = once_cell::sync::Lazy::new(|| {
+static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
     // This code runs ONCE before any test
     env::set_var("JWT_SECRET", "b\"secret\"");
     env::set_var("JWT_TIMEOUT", "3600");
@@ -11,7 +11,7 @@ static INIT: once_cell::sync::Lazy<()> = once_cell::sync::Lazy::new(|| {
 
 fn setup() {
     // Force INIT to run
-    once_cell::sync::Lazy::force(&INIT);
+    std::sync::LazyLock::force(&INIT);
 }
 
 #[cfg(test)]
@@ -29,7 +29,7 @@ mod auth_middleware {
     #[tokio::test]
     async fn test_middleware_bypass_public_routes() {
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         let app = test::init_service(
             App::new()
@@ -49,7 +49,7 @@ mod auth_middleware {
     #[tokio::test]
     async fn test_middleware_no_token_returns_401() {
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         let app = test::init_service(
             App::new()
@@ -76,7 +76,7 @@ mod auth_middleware {
     async fn test_middleware_valid_token_success() {
         setup();
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         // On récupère l'ID d'Alice depuis ton setup global
         let alice_id = *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
@@ -95,7 +95,7 @@ mod auth_middleware {
 
         let req = test::TestRequest::get()
             .uri("/protected")
-            .insert_header(("Authorization", format!("Bearer {}", token)))
+            .insert_header(("Authorization", format!("Bearer {token}")))
             .to_request();
 
         let resp = &test::call_service(&app, req).await;
@@ -113,7 +113,7 @@ mod auth_middleware {
     #[tokio::test]
     async fn test_middleware_expired_token_returns_401() {
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         setup();
         env::set_var("JWT_TIMEOUT", "0");
@@ -131,7 +131,7 @@ mod auth_middleware {
 
         let req = test::TestRequest::get()
             .uri("/protected")
-            .insert_header(("Authorization", format!("Bearer {}", token)))
+            .insert_header(("Authorization", format!("Bearer {token}")))
             .to_request();
 
         // 1. UTILISER try_call_service
@@ -166,7 +166,7 @@ mod access_middleware {
     async fn test_access_granted_owner() {
         setup();
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         // On récupère Alice (ID 1 dans ton setup)
         let alice_id = *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
@@ -189,12 +189,12 @@ mod access_middleware {
 
         // On simule une requête sur sa propre ressource (Alice accède à Alice)
         let req = test::TestRequest::get()
-            .uri(&format!("/users/{}/data", alice_id))
+            .uri(&format!("/users/{alice_id}/data"))
             .to_request();
 
         // On injecte l'utilisateur authentifié (simule le JwtMiddleware)
         req.extensions_mut().insert(AuthenticatedUser {
-            id: alice_id as u64,
+            id: u64::try_from(alice_id).unwrap(),
         });
 
         let resp = test::call_service(&app, req).await;
@@ -208,7 +208,7 @@ mod access_middleware {
     async fn test_access_forbidden_for_other_user() {
         setup();
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         let alice_id = *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
             .get()
@@ -231,11 +231,11 @@ mod access_middleware {
 
         // Alice (ID 1) essaie d'accéder aux données de Bob (ID 2)
         let req = test::TestRequest::get()
-            .uri(&format!("/users/{}/secret", bob_id))
+            .uri(&format!("/users/{bob_id}/secret"))
             .to_request();
 
         req.extensions_mut().insert(AuthenticatedUser {
-            id: alice_id as u64,
+            id: u64::try_from(alice_id).unwrap(),
         });
 
         let resp = test::try_call_service(&app, req).await;
@@ -254,7 +254,7 @@ mod access_middleware {
     async fn test_access_bad_request_invalid_id_format() {
         setup();
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         let app = test::init_service(
             App::new().app_data(app_state.clone()).service(
@@ -296,7 +296,7 @@ mod access_middleware {
     async fn test_access_global_permission_success() {
         setup();
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         // Ici, on teste le cas où id_param_pattern est None (vérification globale)
         // Utile pour les routes de listing ou Admin
@@ -346,7 +346,7 @@ mod admin_path_tests {
     async fn test_admin_path() {
         setup();
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         let app = test::init_service(
             App::new().app_data(app_state.clone()).service(
@@ -361,7 +361,7 @@ mod admin_path_tests {
 
         let req = test::TestRequest::get()
             .uri("/api/v1/admin/all-users")
-            .insert_header(("Authorization", format!("Bearer {}", token)))
+            .insert_header(("Authorization", format!("Bearer {token}")))
             .to_request();
 
         // On simule un utilisateur (ID 1)
@@ -369,14 +369,14 @@ mod admin_path_tests {
         let resp = test::call_service(&app, req).await;
 
         // Le test passe si le statut est OK ou FORBIDDEN (Alice peut être admin ou non)
-        assert!(resp.status() == StatusCode::OK);
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[actix_web::test]
     async fn test_admin_path_forbidden() {
         setup();
         let (_container, url) = get_shared_db().await;
-        let app_state = web::Data::new(AppState::new("".to_string(), url.to_string()).await);
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
 
         let app = test::init_service(
             App::new().app_data(app_state.clone()).service(
@@ -391,7 +391,7 @@ mod admin_path_tests {
 
         let req = test::TestRequest::get()
             .uri("/api/v1/admin/all-users")
-            .insert_header(("Authorization", format!("Bearer {}", token)))
+            .insert_header(("Authorization", format!("Bearer {token}")))
             .to_request();
 
         let resp = test::try_call_service(&app, req).await;

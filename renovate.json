@@ -1,5 +1,23 @@
 {
   "extends": [
     "github>mairie360/renovate-config"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^src/test_setup/db_setup\\.rs$"],
+      "matchStrings": [
+        "// renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+const DEFAULT_DB_VERSION: &str = \"(?<currentValue>.*?)\";"
+      ]
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^\\.github/workflows/cicd\\.yml$"],
+      "matchStrings": [
+        "cicd_version:\\s*(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "mairie360/CICD",
+      "datasourceTemplate": "github-tags"
+    }
   ]
 }

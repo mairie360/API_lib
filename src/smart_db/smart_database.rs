@@ -1,4 +1,4 @@
-// Fichier : src/smart_db/smart_db.rs
+// Fichier : src/smart_db/smart_database.rs
 
 use redis::{FromRedisValue, ToSingleRedisArg};
 use serde::de::DeserializeOwned;
@@ -15,18 +15,24 @@ pub struct SmartDatabase {
 }
 
 impl SmartDatabase {
-    /// Constructeur pour initialiser le SmartDatabase avec tes deux interfaces[cite: 1]
-    pub fn new(db: Database, redis: Redis) -> Self {
+    /// Constructeur pour initialiser le `SmartDatabase` avec tes deux interfaces[cite: 1]
+    #[must_use]
+    pub const fn new(db: Database, redis: Redis) -> Self {
         Self { db, redis }
     }
 
     /// Renvoie le client Redis utilisé par le cache-aside. `Redis` encapsule un
     /// `Arc`, le clone renvoyé partage donc le même pool et le même état de
     /// connexion que celui interrogé par `fetch_*`/`execute`.
+    #[must_use]
     pub fn get_redis(&self) -> Redis {
         self.redis.clone()
     }
 
+    /// # Errors
+    ///
+    /// Renvoie une [`ApiLibError`] si la requête en base échoue. Les erreurs Redis sont
+    /// ignorées : le cache n'est qu'une optimisation.
     pub async fn execute<Q>(&self, query: Q) -> Result<(), ApiLibError>
     where
         Q: ApiRequestDto,
@@ -42,6 +48,10 @@ impl SmartDatabase {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Renvoie une [`ApiLibError`] si la requête en base échoue. Les erreurs Redis sont
+    /// ignorées : le cache n'est qu'une optimisation.
     pub async fn fetch_one<T, Q>(&self, query: &Q) -> Result<T, ApiLibError>
     where
         T: DeserializeOwned + Serialize,
@@ -76,6 +86,10 @@ impl SmartDatabase {
         Ok(value)
     }
 
+    /// # Errors
+    ///
+    /// Renvoie une [`ApiLibError`] si la requête en base échoue. Les erreurs Redis sont
+    /// ignorées : le cache n'est qu'une optimisation.
     pub async fn fetch_all<T, Q>(&self, query: &Q) -> Result<Vec<T>, ApiLibError>
     where
         T: DeserializeOwned + Serialize,
@@ -110,6 +124,10 @@ impl SmartDatabase {
         Ok(values)
     }
 
+    /// # Errors
+    ///
+    /// Renvoie une [`ApiLibError`] si la requête en base échoue. Les erreurs Redis sont
+    /// ignorées : le cache n'est qu'une optimisation.
     pub async fn fetch_scalar<T, Q>(&self, query: &Q) -> Result<T, ApiLibError>
     where
         // Contraintes SQL existantes[cite: 1]

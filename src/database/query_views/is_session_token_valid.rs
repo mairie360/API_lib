@@ -1,4 +1,4 @@
-use crate::database::db_interface::{ApiRequestDto, QueryParam};
+use crate::database::db_interface::{id_from_sql, id_to_sql, ApiRequestDto, QueryParam};
 use std::fmt::Display;
 use std::net::IpAddr;
 
@@ -8,21 +8,25 @@ pub struct IsSessionTokenValidQueryView {
 }
 
 impl IsSessionTokenValidQueryView {
+    #[must_use]
     pub fn new(user_id: u64, session_token: String, ip_address: IpAddr) -> Self {
         Self {
             params: vec![
-                QueryParam::I32(user_id as i32),
+                QueryParam::I32(id_to_sql(user_id)),
                 QueryParam::Text(session_token),
                 QueryParam::IpAddr(ip_address),
             ],
         }
     }
+    #[must_use]
     pub fn get_user_id(&self) -> u64 {
-        self.params[0].as_i32() as u64
+        id_from_sql(self.params[0].as_i32())
     }
+    #[must_use]
     pub fn get_session_token(&self) -> &str {
         self.params[1].as_text()
     }
+    #[must_use]
     pub fn get_ip_address(&self) -> IpAddr {
         self.params[2].as_ipaddr()
     }

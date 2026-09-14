@@ -2,7 +2,6 @@ use mairie360_api_lib::jwt_manager::{
     check_jwt_validity, generate_jwt, get_jwt_secret, get_jwt_timeout, get_user_id_from_jwt,
 };
 use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
-use once_cell::sync::Lazy;
 use serial_test::serial;
 use std::env;
 
@@ -16,7 +15,7 @@ static USER_ID: &str = "1";
 /**
  * Global setup for tests.
  */
-static INIT: Lazy<()> = Lazy::new(|| {
+static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
     // This code runs ONCE before any test
     env::set_var("JWT_SECRET", "b\"secret\"");
     env::set_var("JWT_TIMEOUT", "3600");
@@ -29,7 +28,7 @@ static INIT: Lazy<()> = Lazy::new(|| {
  */
 fn setup() {
     // Force INIT to run
-    Lazy::force(&INIT);
+    std::sync::LazyLock::force(&INIT);
 }
 
 /**
@@ -63,7 +62,7 @@ mod jwt_tests {
         );
         assert_eq!(
             secret.unwrap(),
-            "b\"secret\"".to_string().into_bytes(),
+            b"b\"secret\"".to_vec(),
             "JWT secret does not match expected value"
         );
     }

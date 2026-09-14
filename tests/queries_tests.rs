@@ -92,14 +92,12 @@ mod queries_tests {
             // Ici on valide que ton From<sqlx::Error> ou ta validation manuelle fonctionne
             assert!(
                 result.is_ok(),
-                "Expected invalid email format to return an error got: {:?}",
-                result
+                "Expected invalid email format to return an error got: {result:?}"
             );
             let does_exist = result.unwrap();
             assert!(
                 !does_exist,
-                "Expected invalid email format to return false, got: {:?}",
-                does_exist
+                "Expected invalid email format to return false, got: {does_exist:?}"
             );
         }
 
@@ -118,14 +116,12 @@ mod queries_tests {
             // Comme il n'y a pas de '@', ta fonction renvoie l'erreur de format AVANT la DB
             assert!(
                 result.is_ok(),
-                "Expected valid email to return true, got: {:?}",
-                result
+                "Expected valid email to return true, got: {result:?}"
             );
             let does_exist = result.unwrap();
             assert!(
                 !does_exist,
-                "Expected invalid email to return false, got: {:?}",
-                does_exist
+                "Expected invalid email to return false, got: {does_exist:?}"
             );
         }
     }
@@ -141,9 +137,12 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -160,9 +159,12 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::BOB_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::BOB_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
                 "test_token_hash_expired".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -179,9 +181,12 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 2]),
             );
@@ -198,9 +203,12 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
 
             let view = IsSessionTokenValidQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::ADMIN_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::ADMIN_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
                 "test_token_hash_unique_123".to_string(),
                 IpAddr::from([127, 0, 0, 1]),
             );
@@ -223,9 +231,12 @@ mod queries_tests {
 
             // Alice (ID 1) est admin, elle a 'read_all' sur 'document'
             let view = HasAccessQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
                 "document",
                 "read",
                 Some(1),
@@ -233,7 +244,7 @@ mod queries_tests {
 
             let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
-            assert!(result == 1, "expected access granted, got {}", result);
+            assert!(result == 1, "expected access granted, got {result}");
         }
 
         #[tokio::test]
@@ -243,9 +254,12 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
 
             let view = HasAccessQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
                 "document",
                 "read",
                 Some(1),
@@ -253,7 +267,7 @@ mod queries_tests {
 
             let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
-            assert!(result == 1, "expected access granted, got {}", result);
+            assert!(result == 1, "expected access granted, got {result}");
         }
 
         #[tokio::test]
@@ -290,7 +304,7 @@ mod queries_tests {
                     VALUES (50, $1, 'Test ACL Group') \
                     ON CONFLICT (id) DO NOTHING",
             )
-            .bind(alice_id as i32)
+            .bind(alice_id)
             .execute(&pool)
             .await
             .unwrap();
@@ -302,20 +316,23 @@ mod queries_tests {
                     (SELECT id FROM public.permissions WHERE action = 'read' AND resource_id = (SELECT id FROM public.resources WHERE name = 'groups') LIMIT 1)) \
                     ON CONFLICT DO NOTHING"
                 )
-                    .bind(alice_id as i32)
+                    .bind(alice_id)
                     .execute(&pool)
                     .await
                     .unwrap();
 
             // 5. Exécution du test
-            let view = HasAccessQueryView::new(alice_id as u64, "groups", "read", Some(50));
+            let view = HasAccessQueryView::new(
+                u64::try_from(alice_id).unwrap(),
+                "groups",
+                "read",
+                Some(50),
+            );
             let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
             assert!(
                 result == 1,
-                "Alice ({}) should have individual ACL access to group 50, got {}",
-                alice_id,
-                result
+                "Alice ({alice_id}) should have individual ACL access to group 50, got {result}"
             );
         }
 
@@ -344,15 +361,18 @@ mod queries_tests {
                              VALUES (10, $1, 'Confidential Group') \
                              ON CONFLICT (id) DO NOTHING",
             )
-            .bind(alice_id as i32)
+            .bind(alice_id)
             .execute(&pool)
             .await
             .unwrap();
 
             let view = HasAccessQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::BOB_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::BOB_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
                 "groups",
                 "read",
                 Some(10),
@@ -360,7 +380,7 @@ mod queries_tests {
 
             let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
-            assert!(result == 0, "expected access denied, got {}", result);
+            assert!(result == 0, "expected access denied, got {result}");
         }
 
         #[tokio::test]
@@ -370,9 +390,12 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
 
             let view = HasAccessQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::ALICE_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
                 "ghost_resource",
                 "read",
                 Some(0),
@@ -380,7 +403,7 @@ mod queries_tests {
 
             let result = interface.fetch_scalar::<i32, _>(&view).await.unwrap();
 
-            assert!(result == -1, "expected access denied, got {}", result);
+            assert!(result == -1, "expected access denied, got {result}");
         }
     }
 
@@ -397,9 +420,12 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
 
             let view = IsAdminQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::ADMIN_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::ADMIN_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
             );
 
             let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
@@ -414,9 +440,12 @@ mod queries_tests {
             let interface: Database = Database::new(host.as_str()).await;
 
             let view = IsAdminQueryView::new(
-                *mairie360_api_lib::test_setup::queries_setup::BOB_ID
-                    .get()
-                    .unwrap() as u64,
+                u64::try_from(
+                    *mairie360_api_lib::test_setup::queries_setup::BOB_ID
+                        .get()
+                        .unwrap(),
+                )
+                .unwrap(),
             );
 
             let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();

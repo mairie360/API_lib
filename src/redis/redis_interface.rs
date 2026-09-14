@@ -24,12 +24,13 @@ struct RedisInner {
 }
 
 impl Redis {
+    #[must_use]
     pub fn new(redis_url: &str) -> Self {
         let redis_cfg = Config::from_url(redis_url);
         let redis_pool = match redis_cfg.create_pool(Some(Runtime::Tokio1)) {
             Ok(pool) => Some(pool),
             Err(e) => {
-                eprintln!("Failed to connect to Redis: {}", e);
+                eprintln!("Failed to connect to Redis: {e}");
                 None
             }
         };
@@ -56,15 +57,20 @@ impl Redis {
         let pool = match redis_cfg.create_pool(Some(Runtime::Tokio1)) {
             Ok(pool) => pool,
             Err(e) => {
-                eprintln!("Failed to connect to Redis: {}", e);
+                eprintln!("Failed to connect to Redis: {e}");
                 return Err(PoolError::Closed);
             }
         };
 
         *guard = Some(pool.clone());
+        drop(guard);
         Ok(pool)
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn get<T>(&self, key: &str) -> Result<T, RedisError>
     where
         T: FromRedisValue, // <--- C'est ici que la magie opère
@@ -87,6 +93,10 @@ impl Redis {
         Ok(result)
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn set<V>(&self, key: &str, value: V) -> Result<(), RedisError>
     where
         V: ToSingleRedisArg + Send + Sync,
@@ -109,6 +119,10 @@ impl Redis {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn delete(&self, key: &str) -> Result<(), RedisError> {
         let pool = self
             .get_pool()
@@ -121,14 +135,17 @@ impl Redis {
             .map_err(|e| RedisError::Pool(e.to_string()))?;
 
         // Ajout explicite du turbofish ::<()> pour éviter l'erreur de typage
-        let result = conn
-            .del(key)
+        conn.del::<_, ()>(key)
             .await
             .map_err(|e| RedisError::Driver(e.to_string()))?;
 
-        Ok(result)
+        Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn expire(&self, key: &str, seconds: u64) -> Result<(), RedisError> {
         let pool = self
             .get_pool()
@@ -140,13 +157,17 @@ impl Redis {
             .map_err(|e| RedisError::Pool(e.to_string()))?;
 
         let _: () = conn
-            .expire(key, seconds as i64)
+            .expire(key, i64::try_from(seconds).unwrap_or(i64::MAX))
             .await
             .map_err(|e| RedisError::Driver(e.to_string()))?;
 
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn key_exist(&self, key: &str) -> Result<bool, RedisError> {
         let pool = self
             .get_pool()
@@ -167,6 +188,10 @@ impl Redis {
         Ok(result)
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn secure_get<T>(&self, key: &str) -> Result<Option<T>, RedisError>
     where
         T: FromRedisValue,
@@ -194,6 +219,10 @@ impl Redis {
         Ok(Some(result))
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn secure_set<V>(&self, key: &str, value: V) -> Result<(), RedisError>
     where
         V: ToSingleRedisArg + Send + Sync,
@@ -219,6 +248,10 @@ impl Redis {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn secure_delete(&self, key: &str) -> Result<(), RedisError> {
         let pool = self
             .get_pool()
@@ -241,6 +274,10 @@ impl Redis {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
+    /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn secure_expire(&self, key: &str, seconds: u64) -> Result<(), RedisError> {
         let pool = self
             .get_pool()

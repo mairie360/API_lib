@@ -17,14 +17,16 @@ pub enum AppTemplate {
 
 impl AppTemplate {
     // Retourne l'alias textuel visible sur le dashboard Resend
-    pub fn template_alias(&self) -> &'static str {
+    #[must_use]
+    pub const fn template_alias(&self) -> &'static str {
         match self {
             // AppTemplate::Welcome { .. } => "welcome-email", // Votre alias Resend
-            AppTemplate::FirstConnectPasswordReset { .. } => "first-connect", // Votre alias Resend
+            Self::FirstConnectPasswordReset { .. } => "first-connect", // Votre alias Resend
         }
     }
 
     // Convertit les variables structurées en HashMap pour Resend
+    #[must_use]
     pub fn into_variables(self) -> HashMap<String, serde_json::Value> {
         let mut vars = HashMap::new();
         match self {
@@ -38,7 +40,7 @@ impl AppTemplate {
             //         serde_json::json!(activation_link),
             //     );
             // }
-            AppTemplate::FirstConnectPasswordReset {
+            Self::FirstConnectPasswordReset {
                 target_name,
                 mairie_name,
                 reset_link,

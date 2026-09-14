@@ -7,14 +7,16 @@ pub struct DoesUserExistByEmailQueryView {
 }
 
 impl DoesUserExistByEmailQueryView {
+    #[must_use]
     pub fn new(email: String) -> Self {
         Self {
             params: vec![QueryParam::Text(email)],
         }
     }
 
+    #[must_use]
     pub fn get_email(&self) -> &str {
-        &self.params[0].as_text()
+        self.params[0].as_text()
     }
 }
 

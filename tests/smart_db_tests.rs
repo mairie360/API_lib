@@ -144,19 +144,6 @@ mod smart_database_tests {
     #[tokio::test]
     #[serial]
     async fn test_smart_db_cache_invalidation_on_execute() {
-        let (_db_container, db_host) = get_shared_db().await;
-        let (_redis_node, redis_config) = start_redis_container().await;
-
-        let db = Database::new(db_host.as_str()).await;
-        let redis = Redis::new(&redis_config.url);
-        let smart_db = SmartDatabase::new(db, redis.clone());
-
-        let view = CachedUserExistsView::new(1);
-        let cache_key = "test:user:exists:1";
-
-        let _: bool = smart_db.fetch_scalar(&view).await.unwrap();
-        assert!(redis.key_exist(cache_key).await.unwrap());
-
         #[derive(Debug, Clone, Deserialize)]
         struct DummyUpdateView {
             params: Vec<QueryParam>,
@@ -172,6 +159,19 @@ mod smart_database_tests {
                 Some("test:user:exists:1".to_string())
             }
         }
+
+        let (_db_container, db_host) = get_shared_db().await;
+        let (_redis_node, redis_config) = start_redis_container().await;
+
+        let db = Database::new(db_host.as_str()).await;
+        let redis = Redis::new(&redis_config.url);
+        let smart_db = SmartDatabase::new(db, redis.clone());
+
+        let view = CachedUserExistsView::new(1);
+        let cache_key = "test:user:exists:1";
+
+        let _: bool = smart_db.fetch_scalar(&view).await.unwrap();
+        assert!(redis.key_exist(cache_key).await.unwrap());
 
         let update_view = DummyUpdateView { params: vec![] };
 

@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "mairie360_api_lib"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "actix-web",
  "anyhow",

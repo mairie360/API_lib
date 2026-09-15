@@ -176,7 +176,7 @@ mod queries_tests {
 
         #[tokio::test]
         #[serial]
-        async fn test_is_session_ip_invalid() {
+        async fn test_is_session_valid_from_other_ip() {
             let (_container, host) = get_shared_db().await;
             let interface: Database = Database::new(host.as_str()).await;
 
@@ -193,7 +193,8 @@ mod queries_tests {
 
             let result = interface.fetch_scalar::<bool, _>(&view).await.unwrap();
 
-            assert!(!result);
+            // Le client a changé d'IP depuis le login : la session doit rester valide.
+            assert!(result);
         }
 
         #[tokio::test]

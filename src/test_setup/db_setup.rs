@@ -9,7 +9,7 @@ use tokio_postgres::NoTls;
 /// Surchargeable par les services consommateurs via la variable d'env `TEST_DB_VERSION`
 /// (utile s'ils doivent tester contre une autre version que celle par défaut de la lib).
 // renovate: datasource=docker depName=ghcr.io/mairie360/database
-const DEFAULT_DB_VERSION: &str = "1.1.0";
+const DEFAULT_DB_VERSION: &str = "1.2.1";
 
 fn db_version() -> String {
     env::var("TEST_DB_VERSION").unwrap_or_else(|_| DEFAULT_DB_VERSION.to_string())

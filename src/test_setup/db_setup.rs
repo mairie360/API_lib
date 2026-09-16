@@ -1,5 +1,6 @@
 use std::env;
 use std::time::Duration;
+use testcontainers::core::IntoContainerPort;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tokio_postgres::NoTls;
@@ -10,6 +11,12 @@ use tokio_postgres::NoTls;
 /// (utile s'ils doivent tester contre une autre version que celle par défaut de la lib).
 // renovate: datasource=docker depName=ghcr.io/mairie360/database
 const DEFAULT_DB_VERSION: &str = "1.1.0";
+
+/// Port interne du conteneur Postgres, publié sur un port hôte aléatoire.
+const POSTGRES_PORT: u16 = 5432;
+
+/// Nombre d'essais de connexion (espacés de 300 ms) avant de déclarer la base indisponible.
+const HEALTHCHECK_ATTEMPTS: u32 = 100;
 
 fn db_version() -> String {
     env::var("TEST_DB_VERSION").unwrap_or_else(|_| DEFAULT_DB_VERSION.to_string())
@@ -26,8 +33,12 @@ pub struct TestDbConfig {
 ///
 /// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
 /// continuer sans son environnement.
-pub async fn run_migrations(_container: &ContainerAsync<GenericImage>) {
-    let liquibase_url = "jdbc:postgresql://127.0.0.1:5432/postgres";
+pub async fn run_migrations(container: &ContainerAsync<GenericImage>) {
+    let port = container
+        .get_host_port_ipv4(POSTGRES_PORT.tcp())
+        .await
+        .expect("Port Postgres non exposé");
+    let liquibase_url = format!("jdbc:postgresql://127.0.0.1:{port}/postgres");
 
     println!("🚀 Liquibase connectant à : {liquibase_url}");
 
@@ -38,7 +49,7 @@ pub async fn run_migrations(_container: &ContainerAsync<GenericImage>) {
         .with_cmd(vec![
             "update",
             "--url",
-            liquibase_url,
+            &liquibase_url,
             "--username",
             "postgres",
             "--password",
@@ -70,8 +81,10 @@ pub async fn run_migrations(_container: &ContainerAsync<GenericImage>) {
 /// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
 /// continuer sans son environnement.
 pub async fn start_postgres_container() -> (ContainerAsync<GenericImage>, TestDbConfig) {
+    // Port hôte aléatoire : un Postgres déjà présent sur 5432 (stack docker compose, conteneur
+    // oublié…) ne peut plus prendre la place de la base de test.
     let node = GenericImage::new("ghcr.io/mairie360/database", &db_version())
-        .with_network("host") // Mode host pour la simplicité sous Linux
+        .with_exposed_port(POSTGRES_PORT.tcp())
         .with_env_var("POSTGRES_USER", "postgres")
         .with_env_var("POSTGRES_PASSWORD", "postgres")
         .with_env_var("POSTGRES_DB", "postgres")
@@ -79,27 +92,37 @@ pub async fn start_postgres_container() -> (ContainerAsync<GenericImage>, TestDb
         .await
         .expect("Failed to start Postgres");
 
-    // En mode host, on tape directement sur 127.0.0.1:5432
+    let port = node
+        .get_host_port_ipv4(POSTGRES_PORT.tcp())
+        .await
+        .expect("Port Postgres non exposé");
     let config = TestDbConfig {
         host: "127.0.0.1".to_string(),
-        port: 5432,
+        port,
     };
 
-    let connection_string =
-        "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=postgres";
+    let connection_string = format!(
+        "host={} port={} user=postgres password=postgres dbname=postgres",
+        config.host, config.port
+    );
 
     // Healthcheck
-    let mut attempts = 0;
-    while attempts < 15 {
-        if tokio_postgres::connect(connection_string, NoTls)
+    let mut ready = false;
+    for _ in 0..HEALTHCHECK_ATTEMPTS {
+        if tokio_postgres::connect(&connection_string, NoTls)
             .await
             .is_ok()
         {
+            ready = true;
             break;
         }
         tokio::time::sleep(Duration::from_millis(300)).await;
-        attempts += 1;
     }
+    assert!(
+        ready,
+        "La base de test ne répond pas sur {}:{}",
+        config.host, config.port
+    );
 
     run_migrations(&node).await;
     (node, config)

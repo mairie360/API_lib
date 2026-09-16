@@ -2279,6 +2279,7 @@ dependencies = [
  "deadpool-redis",
  "futures-util",
  "jsonwebtoken",
+ "libc",
  "mairie360_api_lib",
  "postgres",
  "redis",

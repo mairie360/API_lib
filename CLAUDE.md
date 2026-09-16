@@ -36,7 +36,7 @@ CI runs via a shared reusable workflow (`mairie360/CICD/.github/workflows/back-l
 
 ## Tests
 
-Integration tests live in `tests/*.rs` and spin up real Postgres/Redis via `testcontainers` (Docker is required). Most tests share one Postgres container and one seeded dataset via `test_setup::queries_setup::get_shared_db()`, which uses a `tokio::sync::OnceCell` so the container/migrations/seed run once per test binary. Migrations are applied by running the `ghcr.io/mairie360/liquibase-migrations` image against the `ghcr.io/mairie360/database` container (see `src/test_setup/db_setup.rs`) — pulling these images requires registry access.
+Integration tests live in `tests/*.rs` and spin up real Postgres/Redis via `testcontainers` (Docker is required). Most tests share one Postgres container and one seeded dataset via `test_setup::queries_setup::get_shared_db()`, which uses a `tokio::sync::OnceCell` so the container/migrations/seed run once per test binary. Migrations are applied by running the `ghcr.io/mairie360/liquibase-migrations` image against the `ghcr.io/mairie360/database` container (see `src/test_setup/db_setup.rs`) — pulling these images requires registry access. Postgres is published on a random host port (never the host network / `5432`, so an unrelated local Postgres cannot be picked up instead), and the shared container is removed by an `atexit` hook since the `static` holding it is never dropped.
 
 Seeded fixture users (Alice/Bob/Admin/Group Owner) and their IDs are exposed as `OnceCell` statics in `test_setup::queries_setup` (`ALICE_ID`, `BOB_ID`, `ADMIN_ID`, `GROUP_OWNER_ID`) — tests read these after `get_shared_db()` has run.
 

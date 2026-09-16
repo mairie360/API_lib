@@ -1,5 +1,7 @@
 use super::db_setup::start_postgres_container;
 use std::env;
+use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use testcontainers::{ContainerAsync, GenericImage};
 use tokio::sync::OnceCell;
 use tokio_postgres::{Client, NoTls};
@@ -17,14 +19,14 @@ pub static GROUP_OWNER_ID: OnceCell<i32> = OnceCell::const_new();
 /// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
 /// continuer sans son environnement.
 pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, String) {
-    let (node, _) = start_postgres_container().await;
-    let host = "127.0.0.1";
-    let port = 5432;
+    let (node, config) = start_postgres_container().await;
+    let postgres_url = format!(
+        "postgres://postgres:postgres@{}:{}/postgres",
+        config.host, config.port
+    );
 
-    let postgres_url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
-
-    env::set_var("DB_HOST", host);
-    env::set_var("DB_PORT", port.to_string());
+    env::set_var("DB_HOST", &config.host);
+    env::set_var("DB_PORT", config.port.to_string());
 
     let (client, connection) = tokio_postgres::connect(&postgres_url, NoTls)
         .await
@@ -195,6 +197,31 @@ pub async fn setup_access_control_data(client: &Client) {
 
 static SHARED_DB: OnceCell<(ContainerAsync<GenericImage>, String)> = OnceCell::const_new();
 
+/// Identifiant du conteneur de `SHARED_DB`, supprimé à la sortie du processus.
+static SHARED_DB_CONTAINER_ID: OnceLock<String> = OnceLock::new();
+
+/// Supprime le conteneur partagé : une `static` n'est jamais droppée, testcontainers ne le fait donc
+/// pas lui-même, et le conteneur survivrait au binaire de test.
+extern "C" fn remove_shared_db_container() {
+    if let Some(id) = SHARED_DB_CONTAINER_ID.get() {
+        let _ = Command::new("docker")
+            .args(["rm", "--force", "--volumes", id])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+fn remove_shared_db_container_at_exit(id: &str) {
+    if SHARED_DB_CONTAINER_ID.set(id.to_owned()).is_ok() {
+        // SAFETY: `remove_shared_db_container` est une fonction `extern "C"` sans argument qui ne
+        // panique pas ; `atexit` ne fait que l'enregistrer.
+        if unsafe { libc::atexit(remove_shared_db_container) } != 0 {
+            eprintln!("⚠️ Impossible d'enregistrer la suppression du conteneur de test {id}");
+        }
+    }
+}
+
 // async fn setup_tests_full() -> (ContainerAsync<GenericImage>, String) {
 //     let (node, client, url) = setup_test_container().await;
 
@@ -220,6 +247,7 @@ pub async fn get_shared_db() -> &'static (ContainerAsync<GenericImage>, String) 
 
             // 1. Démarre le conteneur et le client
             let (node, client, url) = setup_test_container().await;
+            remove_shared_db_container_at_exit(node.id());
 
             // 2. Nettoie les données existantes (sans supprimer les tables)
             client

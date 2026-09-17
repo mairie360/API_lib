@@ -10,7 +10,7 @@ use tokio_postgres::NoTls;
 /// Surchargeable par les services consommateurs via la variable d'env `TEST_DB_VERSION`
 /// (utile s'ils doivent tester contre une autre version que celle par défaut de la lib).
 // renovate: datasource=docker depName=ghcr.io/mairie360/database
-const DEFAULT_DB_VERSION: &str = "1.2.1";
+const DEFAULT_DB_VERSION: &str = "1.3.0";
 
 /// Port interne du conteneur Postgres, publié sur un port hôte aléatoire.
 const POSTGRES_PORT: u16 = 5432;

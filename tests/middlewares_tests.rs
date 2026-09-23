@@ -405,3 +405,243 @@ mod admin_path_tests {
         }
     }
 }
+
+/// Keycloak access tokens go through the same middlewares as the historical JWTs: the token is
+/// verified against the realm keys (fake realm from `test_setup::keycloak_setup`) and the
+/// verified e-mail is matched to an account.
+#[cfg(test)]
+mod keycloak_tokens {
+    use super::*;
+    use actix_web::{http::StatusCode, test, web, App, HttpResponse};
+    use mairie360_api_lib::security::{AdminMiddleware, AuthenticatedUser, JwtMiddleware};
+    use mairie360_api_lib::test_setup::keycloak_setup::{
+        access_token_claims, sign, KeycloakMock, TestKey,
+    };
+    use mairie360_api_lib::test_setup::queries_setup::ALICE_ID;
+    use serde_json::json;
+
+    // Returns the id the middleware injected, to check the e-mail → account mapping.
+    async fn whoami(user: AuthenticatedUser) -> HttpResponse {
+        HttpResponse::Ok().body(user.id.to_string())
+    }
+
+    async fn app_state(url: &str, mock: Option<&KeycloakMock>) -> web::Data<AppState> {
+        web::Data::new(
+            AppState::with_keycloak(
+                String::new(),
+                url.to_string(),
+                mock.map(KeycloakMock::config),
+            )
+            .await,
+        )
+    }
+
+    fn bearer(token: &str) -> (&'static str, String) {
+        ("Authorization", format!("Bearer {token}"))
+    }
+
+    #[tokio::test]
+    async fn test_jwt_middleware_accepts_a_keycloak_token() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let mock = KeycloakMock::start();
+        let app_state = app_state(url, Some(&mock)).await;
+        let alice_id = *ALICE_ID.get().unwrap();
+
+        let app = test::init_service(
+            App::new()
+                .app_data(app_state.clone())
+                .wrap(JwtMiddleware)
+                .route("/protected", web::get().to(whoami)),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/protected")
+            .insert_header(bearer(&mock.access_token("alice@example.com")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        assert_eq!(body, alice_id.to_string().as_bytes());
+    }
+
+    #[tokio::test]
+    async fn test_jwt_middleware_still_accepts_legacy_tokens_with_keycloak_enabled() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let mock = KeycloakMock::start();
+        let app_state = app_state(url, Some(&mock)).await;
+        let alice_id = *ALICE_ID.get().unwrap();
+        let token =
+            mairie360_api_lib::jwt_manager::generate_jwt(&alice_id.to_string(), "User").unwrap();
+
+        let app = test::init_service(
+            App::new()
+                .app_data(app_state.clone())
+                .wrap(JwtMiddleware)
+                .route("/protected", web::get().to(whoami)),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/protected")
+            .insert_header(bearer(&token))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        assert_eq!(body, alice_id.to_string().as_bytes());
+    }
+
+    #[tokio::test]
+    async fn test_jwt_middleware_refuses_keycloak_tokens_when_disabled() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let mock = KeycloakMock::start();
+        let app_state = app_state(url, None).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(app_state.clone())
+                .wrap(JwtMiddleware)
+                .route("/protected", web::get().to(whoami)),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/protected")
+            .insert_header(bearer(&mock.access_token("alice@example.com")))
+            .to_request();
+        let resp = test::try_call_service(&app, req).await;
+
+        match resp {
+            Ok(res) => assert_eq!(res.status(), StatusCode::UNAUTHORIZED),
+            Err(err) => assert_eq!(
+                err.as_response_error().status_code(),
+                StatusCode::UNAUTHORIZED
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_jwt_middleware_unknown_keycloak_account_returns_404() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let mock = KeycloakMock::start();
+        let app_state = app_state(url, Some(&mock)).await;
+
+        let app = test::init_service(
+            App::new()
+                .app_data(app_state.clone())
+                .wrap(JwtMiddleware)
+                .route("/protected", web::get().to(whoami)),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/protected")
+            .insert_header(bearer(&mock.access_token("nobody@example.com")))
+            .to_request();
+        let resp = test::try_call_service(&app, req).await;
+
+        match resp {
+            Ok(res) => assert_eq!(res.status(), StatusCode::NOT_FOUND),
+            Err(err) => assert_eq!(err.as_response_error().status_code(), StatusCode::NOT_FOUND),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_jwt_middleware_expired_keycloak_token_returns_401() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let mock = KeycloakMock::start();
+        let app_state = app_state(url, Some(&mock)).await;
+        let mut claims = access_token_claims(mock.realm_url(), "alice@example.com");
+        claims["exp"] = json!(jsonwebtoken::get_current_timestamp() - 300);
+        let token = sign(&claims, TestKey::A, TestKey::A.kid());
+
+        let app = test::init_service(
+            App::new()
+                .app_data(app_state.clone())
+                .wrap(JwtMiddleware)
+                .route("/protected", web::get().to(whoami)),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/protected")
+            .insert_header(bearer(&token))
+            .to_request();
+        let resp = test::try_call_service(&app, req).await;
+
+        match resp {
+            Ok(res) => assert_eq!(res.status(), StatusCode::UNAUTHORIZED),
+            Err(err) => assert_eq!(
+                err.as_response_error().status_code(),
+                StatusCode::UNAUTHORIZED
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_admin_middleware_accepts_a_keycloak_token_of_an_admin() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let mock = KeycloakMock::start();
+        let app_state = app_state(url, Some(&mock)).await;
+        let admin_id = *mairie360_api_lib::test_setup::queries_setup::ADMIN_ID
+            .get()
+            .unwrap();
+
+        let app = test::init_service(
+            App::new().app_data(app_state.clone()).service(
+                web::scope("/api/v1/admin")
+                    .wrap(AdminMiddleware)
+                    .route("/whoami", web::get().to(whoami)),
+            ),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/admin/whoami")
+            .insert_header(bearer(&mock.access_token("admin@test.com")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        assert_eq!(body, admin_id.to_string().as_bytes());
+    }
+
+    #[tokio::test]
+    async fn test_admin_middleware_refuses_a_keycloak_token_of_a_regular_user() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let mock = KeycloakMock::start();
+        let app_state = app_state(url, Some(&mock)).await;
+
+        let app = test::init_service(
+            App::new().app_data(app_state.clone()).service(
+                web::scope("/api/v1/admin")
+                    .wrap(AdminMiddleware)
+                    .route("/whoami", web::get().to(whoami)),
+            ),
+        )
+        .await;
+
+        // The group owner has no role in the shared fixtures.
+        let req = test::TestRequest::get()
+            .uri("/api/v1/admin/whoami")
+            .insert_header(bearer(&mock.access_token("owner@test.com")))
+            .to_request();
+        let resp = test::try_call_service(&app, req).await;
+
+        match resp {
+            Ok(res) => assert_eq!(res.status(), StatusCode::FORBIDDEN),
+            Err(err) => assert_eq!(err.as_response_error().status_code(), StatusCode::FORBIDDEN),
+        }
+    }
+}

@@ -2,8 +2,8 @@ use actix_web::{HttpResponse, ResponseError};
 use thiserror::Error;
 
 use crate::{
-    database::error::DbError, jwt_manager::error::JWTCheckError, password::error::PasswordError,
-    redis::error::RedisError,
+    database::error::DbError, jwt_manager::error::JWTCheckError, keycloak::KeycloakError,
+    password::error::PasswordError, redis::error::RedisError,
 };
 
 #[derive(Debug, Error)]
@@ -16,6 +16,9 @@ pub enum ApiLibError {
 
     #[error(transparent)]
     Jwt(#[from] JWTCheckError),
+
+    #[error(transparent)]
+    Keycloak(#[from] KeycloakError),
 
     #[error(transparent)]
     Password(#[from] PasswordError),
@@ -33,6 +36,7 @@ impl ResponseError for ApiLibError {
             Self::Database(err) => err.error_response(),
             Self::Redis(err) => err.error_response(),
             Self::Jwt(err) => err.error_response(),
+            Self::Keycloak(err) => err.error_response(),
             Self::Password(err) => err.error_response(),
             Self::Email(_) => {
                 HttpResponse::InternalServerError().body("Échec de l'envoi de l'e-mail")

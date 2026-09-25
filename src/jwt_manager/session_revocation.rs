@@ -5,8 +5,9 @@
 //! change) with a time to live equal to the remaining lifetime of the session's tokens, so the
 //! list never outgrows the tokens it blocks.
 //!
-//! Keys are used verbatim: this crate never prefixes Redis keys (not with the API role either),
-//! so every API reads the same `revoked:<sid>` key. The Redis ACL grants every API role read
+//! These are the only keys **not** prefixed with the API role (see
+//! [`Redis`](crate::redis::redis_interface::Redis)): every API reads the same `revoked:<sid>`
+//! key. They are reachable only through the two functions below. The Redis ACL grants every API role read
 //! access (`EXISTS`) on `revoked:*` and the Core API write access (`SET`).
 
 use crate::redis::error::RedisError;
@@ -39,7 +40,7 @@ pub async fn revoke_session(
     ttl_seconds: u64,
 ) -> Result<(), RedisError> {
     redis
-        .set_ex(&revoked_session_key(session_id), 1_i32, ttl_seconds.max(1))
+        .set_ex_shared(&revoked_session_key(session_id), 1_i32, ttl_seconds.max(1))
         .await
 }
 
@@ -52,7 +53,7 @@ pub async fn revoke_session(
 pub async fn is_session_revoked(redis: &Redis, session_id: &str) -> Result<bool, RedisError> {
     tokio::time::timeout(
         LOOKUP_TIMEOUT,
-        redis.key_exist(&revoked_session_key(session_id)),
+        redis.exists_shared(&revoked_session_key(session_id)),
     )
     .await
     .map_err(|_| RedisError::Pool("revocation lookup timed out".to_string()))?

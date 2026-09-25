@@ -35,15 +35,52 @@ mod auth_middleware {
             App::new()
                 .app_data(app_state.clone())
                 .wrap(JwtMiddleware)
+                .route("/api/v1/auth/login", web::get().to(index)),
+        )
+        .await;
+
+        // Route skipped by the middleware (/api/v1/auth/...)
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/login")
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_middleware_requires_token_on_paths_merely_containing_auth() {
+        let (_container, url) = get_shared_db().await;
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
+
+        let app = test::init_service(
+            App::new()
+                .app_data(app_state.clone())
+                .wrap(JwtMiddleware)
+                .route("/api/v1/projects/author", web::get().to(index))
+                .route("/api/v1/admin/auth-logs", web::get().to(index))
+                .route("/api/v1/authx", web::get().to(index))
                 .route("/auth/login", web::get().to(index)),
         )
         .await;
 
-        // Test sur une route ignorée par le middleware (/auth/...)
-        let req = test::TestRequest::get().uri("/auth/login").to_request();
-        let resp = test::call_service(&app, req).await;
-
-        assert_eq!(resp.status(), StatusCode::OK);
+        for uri in [
+            "/api/v1/projects/author",
+            "/api/v1/admin/auth-logs",
+            "/api/v1/authx",
+            "/auth/login",
+        ] {
+            let req = test::TestRequest::get().uri(uri).to_request();
+            let status = match test::try_call_service(&app, req).await {
+                Ok(res) => res.status(),
+                Err(err) => err.as_response_error().status_code(),
+            };
+            assert_eq!(
+                status,
+                StatusCode::UNAUTHORIZED,
+                "{uri} must require a token"
+            );
+        }
     }
 
     #[tokio::test]

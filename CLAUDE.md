@@ -63,3 +63,7 @@ The crate is organized as independent modules under `src/`, each declared in `li
 - **`env_manager`** — `get_env_var` (returns `Option<String>`) vs `get_critical_env_var` (panics if unset); prefer `get_critical_env_var` for required startup config, matching existing usage.
 
 Comments and error strings throughout the codebase are written in French — match this when touching existing files.
+
+## Pull request reviewers
+
+Every PR requests a review from the whole team, minus its author: `CarolinHugo`, `LAURETbenjamin`, `MathTek` and `Quentintnrl` (`gh pr create … --reviewer CarolinHugo,LAURETbenjamin,MathTek`). `.github/CODEOWNERS` makes GitHub request them automatically as well.

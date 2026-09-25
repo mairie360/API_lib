@@ -1,6 +1,7 @@
 use crate::database::query_views::DoesUserExistByIdQueryView;
 use crate::jwt_manager::decode_jwt::decode_jwt;
 use crate::jwt_manager::error::JWTCheckError;
+use crate::jwt_manager::session_revocation::is_session_revoked;
 use crate::smart_db::SmartDatabase;
 
 /// Vérifie qu'un JWT est présent, valide, non expiré et qu'il désigne un utilisateur existant.
@@ -10,6 +11,9 @@ use crate::smart_db::SmartDatabase;
 /// - [`JWTCheckError::NoTokenProvided`] si le jeton est vide ;
 /// - [`JWTCheckError::ExpiredToken`] si le jeton est expiré ;
 /// - [`JWTCheckError::InvalidToken`] si le jeton est illisible ou si son `user_id` n'est pas un entier ;
+/// - [`JWTCheckError::RevokedToken`] if the token's session (`sid` claim) was revoked;
+/// - [`JWTCheckError::RevocationCheckUnavailable`] if the token has a `sid` and Redis cannot be
+///   queried (fail closed);
 /// - [`JWTCheckError::DatabaseError`] si la vérification en base échoue ;
 /// - [`JWTCheckError::UnknownUser`] si l'utilisateur n'existe pas.
 pub async fn check_jwt_validity(
@@ -40,6 +44,21 @@ pub async fn check_jwt_validity(
         eprintln!("Failed to parse user ID from JWT claims.");
         JWTCheckError::InvalidToken
     })?;
+
+    // 2b. Revocation list: only tokens bound to a session can be revoked. When Redis cannot be
+    // checked the token is refused (fail closed) with 503, not 401: the token itself is fine, the
+    // client should retry rather than drop its session.
+    if let Some(session_id) = claims.session_id() {
+        let revoked = is_session_revoked(&db_interface.get_redis(), session_id)
+            .await
+            .map_err(|e| {
+                eprintln!("Revocation lookup error: {e}");
+                JWTCheckError::RevocationCheckUnavailable
+            })?;
+        if revoked {
+            return Err(JWTCheckError::RevokedToken);
+        }
+    }
 
     // 3. Vérification en base de données
     let query_view = DoesUserExistByIdQueryView::new(parsed_user_id);

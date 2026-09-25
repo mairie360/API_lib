@@ -7,7 +7,7 @@ pub use decode_jwt::decode_jwt;
 pub mod error;
 
 mod generate_jwt;
-pub use generate_jwt::generate_jwt;
+pub use generate_jwt::{generate_jwt, generate_session_jwt};
 
 mod get_jwt_from_request;
 pub use get_jwt_from_request::get_jwt_from_request;
@@ -28,3 +28,9 @@ mod get_user_id_from_jwt;
 pub use get_user_id_from_jwt::get_user_id_from_jwt;
 
 mod jwt_claims;
+pub use jwt_claims::Claims;
+
+mod session_revocation;
+pub use session_revocation::{
+    is_session_revoked, revoke_session, revoked_session_key, REVOKED_SESSION_KEY_PREFIX,
+};

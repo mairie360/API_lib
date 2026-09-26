@@ -1,4 +1,4 @@
-use crate::jwt_manager::{check_jwt_validity, get_jwt_from_request, get_user_id_from_jwt};
+use crate::jwt_manager::{authenticate_token, get_jwt_from_request};
 use crate::security::{is_public_path, AuthenticatedUser};
 use crate::state::AppState;
 use actix_web::{

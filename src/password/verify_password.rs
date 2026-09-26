@@ -1,20 +1,20 @@
 use argon2::{
-    password_hash::{PasswordHash, PasswordVerifier},
+    password_hash::{phc::PasswordHash, PasswordVerifier},
     Argon2,
 };
 
 use super::error::PasswordError;
 
-/// Vérifie que `password` correspond à l'empreinte argon2id `hash` (format PHC
-/// `$argon2id$...`, tel que produit par [`super::hash_password`]).
+/// Checks that `password` matches the argon2id `hash` (PHC string `$argon2id$...`, as produced
+/// by [`super::hash_password`]).
 ///
-/// N'appeler cette fonction que sur une valeur dont [`super::is_hashed`] est vrai : sur un mot
-/// de passe encore en clair (comptes migrés depuis l'ancien schéma), le parsing échoue avec
-/// [`PasswordError::InvalidHash`] plutôt que de comparer en clair.
+/// Only call it on a value for which [`super::is_hashed`] is true: on a password still stored in
+/// clear text (accounts migrated from the old schema), parsing fails with
+/// [`PasswordError::InvalidHash`] instead of comparing in clear text.
 ///
 /// # Errors
 ///
-/// Renvoie [`PasswordError::InvalidHash`] si `hash` n'est pas une chaîne PHC argon2id valide.
+/// Returns [`PasswordError::InvalidHash`] if `hash` is not a valid argon2id PHC string.
 pub fn verify_password(password: &str, hash: &str) -> Result<bool, PasswordError> {
     let parsed_hash = PasswordHash::new(hash).map_err(|_| PasswordError::InvalidHash)?;
     Ok(Argon2::default()

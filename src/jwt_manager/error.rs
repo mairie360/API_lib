@@ -16,6 +16,12 @@ pub enum JWTCheckError {
     InvalidToken,
     #[error("Utilisateur inconnu")]
     UnknownUser,
+    /// The token's session was revoked (logout, revocation, archived account...).
+    #[error("Revoked token")]
+    RevokedToken,
+    /// The revocation list (Redis) could not be checked: the token is refused (fail closed).
+    #[error("Token revocation check unavailable")]
+    RevocationCheckUnavailable,
     /// A Keycloak token whose e-mail is missing or not verified by the realm.
     #[error("The Keycloak account has no verified e-mail address")]
     EmailNotVerified,
@@ -38,26 +44,30 @@ impl From<KeycloakError> for JWTCheckError {
 impl ResponseError for JWTCheckError {
     fn status_code(&self) -> StatusCode {
         match self {
-            Self::NoTokenProvided | Self::ExpiredToken | Self::InvalidToken => {
-                StatusCode::UNAUTHORIZED
-            }
+            Self::NoTokenProvided
+            | Self::ExpiredToken
+            | Self::InvalidToken
+            | Self::RevokedToken => StatusCode::UNAUTHORIZED,
             Self::EmailNotVerified => StatusCode::FORBIDDEN,
             Self::UnknownUser => StatusCode::NOT_FOUND,
             Self::IdentityProviderUnavailable => StatusCode::BAD_GATEWAY,
             Self::DatabaseError => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::RevocationCheckUnavailable => StatusCode::SERVICE_UNAVAILABLE,
         }
     }
 
     fn error_response(&self) -> HttpResponse {
-        // --- LOGS AUTOMATIQUES SELON LA CRITICITÉ ---
+        // --- Logs, by severity ---
         match self {
-            // NoTokenProvided : comportement courant (visiteur non connecté sur une route protégée) -> Pas de log lourd
-            // ExpiredToken : normal en fin de session -> Pas besoin de spammer les logs d'erreurs
-            // UnknownUser : token valide mais l'utilisateur a été supprimé entre-temps
-            // EmailNotVerified : configuration du realm Keycloak, déjà tracée à la vérification
+            // NoTokenProvided: usual case (anonymous visitor on a protected route), no log.
+            // ExpiredToken: normal at the end of a session, no need to flood the error logs.
+            // UnknownUser: valid token, but the user was deleted in the meantime.
+            // RevokedToken: the user logged out or the session was revoked, expected.
+            // EmailNotVerified: Keycloak realm configuration, already traced during verification.
             Self::NoTokenProvided
             | Self::ExpiredToken
             | Self::UnknownUser
+            | Self::RevokedToken
             | Self::EmailNotVerified => {}
             Self::InvalidToken => {
                 eprintln!("[AVERTISSEMENT SÉCURITÉ] Tentative d'accès avec un jeton JWT altéré ou invalide.");
@@ -68,9 +78,12 @@ impl ResponseError for JWTCheckError {
             Self::DatabaseError => {
                 eprintln!("[ERREUR CRITIQUE JWT] Échec de la base de données lors de la vérification de l'utilisateur.");
             }
+            Self::RevocationCheckUnavailable => {
+                eprintln!("[CRITICAL JWT] Redis unavailable: cannot check the token revocation list, token refused.");
+            }
         }
 
-        // --- GÉNÉRATION DE LA RÉPONSE HTTP ---
+        // --- HTTP response ---
         HttpResponse::build(self.status_code()).body(self.to_string())
     }
 }

@@ -119,6 +119,35 @@ impl Redis {
         Ok(())
     }
 
+    /// Sets `key` to `value` with a time to live of `seconds`, atomically (`SET key value EX
+    /// seconds`), overwriting any previous value. `seconds` must be at least 1.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError::Pool` when no connection can be obtained and `RedisError::Driver`
+    /// when Redis rejects the command (including `seconds == 0`).
+    pub async fn set_ex<V>(&self, key: &str, value: V, seconds: u64) -> Result<(), RedisError>
+    where
+        V: ToSingleRedisArg + Send + Sync,
+    {
+        let pool = self
+            .get_pool()
+            .await
+            .map_err(|e| RedisError::Pool(e.to_string()))?;
+
+        let mut conn = pool
+            .get()
+            .await
+            .map_err(|e| RedisError::Pool(e.to_string()))?;
+
+        let _: () = conn
+            .set_ex(key, value, seconds)
+            .await
+            .map_err(|e| RedisError::Driver(e.to_string()))?;
+
+        Ok(())
+    }
+
     /// # Errors
     ///
     /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et

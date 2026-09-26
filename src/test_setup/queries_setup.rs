@@ -1,5 +1,8 @@
 use super::db_setup::start_postgres_container;
+use crate::password::hash_password;
+use futures_util::FutureExt;
 use std::env;
+use std::panic::AssertUnwindSafe;
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use testcontainers::{ContainerAsync, GenericImage};
@@ -41,6 +44,23 @@ pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, St
     (node, client, postgres_url)
 }
 
+/// Clear-text password of every seeded account.
+pub const SEED_PASSWORD: &str = "password123";
+
+/// Argon2id hash of [`SEED_PASSWORD`], computed once per process.
+///
+/// The `users.password` column only accepts argon2id PHC strings (`chk_users_password_hashed`,
+/// database v1.3.0), so the fixtures cannot insert a clear-text password.
+///
+/// # Panics
+///
+/// Panics if the password cannot be hashed.
+#[must_use]
+pub fn seed_password_hash() -> &'static str {
+    static HASH: OnceLock<String> = OnceLock::new();
+    HASH.get_or_init(|| hash_password(SEED_PASSWORD).expect("Failed to hash the seed password"))
+}
+
 /// 2. Setup pour Alice (Utilisateur actif)
 ///
 /// # Panics
@@ -50,10 +70,10 @@ pub async fn setup_test_container() -> (ContainerAsync<GenericImage>, Client, St
 pub async fn setup_active_session(client: &Client) {
     let row = client.query_one("
         INSERT INTO users (first_name, last_name, email, password, phone_number, status, is_archived)
-        VALUES ('Alice', 'Smith', 'alice@example.com', 'password123', '0102030405', 'active', FALSE)
+        VALUES ('Alice', 'Smith', 'alice@example.com', $1, '0102030405', 'active', FALSE)
         ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
         RETURNING id;
-    ", &[]).await.expect("Failed to insert Alice");
+    ", &[&seed_password_hash()]).await.expect("Failed to insert Alice");
 
     let id: i32 = row.get(0);
     ALICE_ID.set(id).ok();
@@ -95,10 +115,10 @@ pub async fn setup_expired_session(client: &Client) {
 pub async fn setup_archived_user_test(client: &Client) {
     let row = client.query_one("
         INSERT INTO users (first_name, last_name, email, password, phone_number, status, is_archived)
-        VALUES ('Bob', 'Smith', 'bob@example.com', 'password123', '0102030405', 'active', FALSE)
+        VALUES ('Bob', 'Smith', 'bob@example.com', $1, '0102030405', 'active', FALSE)
         ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
         RETURNING id;
-    ", &[]).await.expect("Failed to insert Bob");
+    ", &[&seed_password_hash()]).await.expect("Failed to insert Bob");
 
     let id: i32 = row.get(0);
     BOB_ID.set(id).ok();
@@ -140,11 +160,11 @@ pub async fn setup_access_control_data(client: &Client) {
         .query_one(
             "
         INSERT INTO users (first_name, last_name, email, password, status)
-        VALUES ('Admin', 'User', 'admin@test.com', 'hash', 'active')
+        VALUES ('Admin', 'User', 'admin@test.com', $1, 'active')
         ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
         RETURNING id;
     ",
-            &[],
+            &[&seed_password_hash()],
         )
         .await
         .expect("Failed to insert Admin");
@@ -163,11 +183,11 @@ pub async fn setup_access_control_data(client: &Client) {
         .query_one(
             "
         INSERT INTO users (first_name, last_name, email, password, status)
-        VALUES ('Group', 'Owner', 'owner@test.com', 'hash', 'active')
+        VALUES ('Group', 'Owner', 'owner@test.com', $1, 'active')
         ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
         RETURNING id;
     ",
-            &[],
+            &[&seed_password_hash()],
         )
         .await
         .expect("Failed to insert Group Owner");
@@ -195,7 +215,10 @@ pub async fn setup_access_control_data(client: &Client) {
         .expect("Failed to setup access control data");
 }
 
-static SHARED_DB: OnceCell<(ContainerAsync<GenericImage>, String)> = OnceCell::const_new();
+/// Outcome of the one-time setup, failure included: a `OnceCell` whose initialiser panics stays
+/// empty, so every later test would start a new container and fail the same way again.
+static SHARED_DB: OnceCell<Result<(ContainerAsync<GenericImage>, String), String>> =
+    OnceCell::const_new();
 
 /// Identifiant du conteneur de `SHARED_DB`, supprimé à la sortie du processus.
 static SHARED_DB_CONTAINER_ID: OnceLock<String> = OnceLock::new();
@@ -242,40 +265,56 @@ fn remove_shared_db_container_at_exit(id: &str) {
 /// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
 /// continuer sans son environnement.
 pub async fn get_shared_db() -> &'static (ContainerAsync<GenericImage>, String) {
-    SHARED_DB
+    match SHARED_DB
         .get_or_init(|| async {
             println!("🚀 Lancement du setup global UNIQUE...");
-
-            // 1. Démarre le conteneur et le client
-            let (node, client, url) = setup_test_container().await;
-            remove_shared_db_container_at_exit(node.id());
-
-            // 2. Nettoie les données existantes (sans supprimer les tables)
-            client
-                .batch_execute(
-                    "
-                TRUNCATE TABLE
-                    access_control,
-                    user_roles,
-                    groups,
-                    sessions,
-                    users
-                RESTART IDENTITY CASCADE;
-            ",
-                )
+            AssertUnwindSafe(init_shared_db())
+                .catch_unwind()
                 .await
-                .expect("Erreur lors du nettoyage des données");
-
-            // 3. ICI on lance les insertions de données.
-            // Comme on est dans le OnceCell, ce bloc ne s'exécutera qu'UNE FOIS
-            // pour toute la durée de tes tests.
-            setup_active_session(&client).await;
-            setup_expired_session(&client).await;
-            setup_archived_user_test(&client).await;
-            setup_access_control_data(&client).await;
-
-            println!("✅ Données de test injectées avec succès.");
-            (node, url)
+                .map_err(|payload| {
+                    payload
+                        .downcast_ref::<String>()
+                        .cloned()
+                        .or_else(|| payload.downcast_ref::<&str>().map(ToString::to_string))
+                        .unwrap_or_else(|| "unknown panic".to_owned())
+                })
         })
         .await
+    {
+        Ok(db) => db,
+        Err(reason) => {
+            panic!("The shared test database setup failed, nothing was retried: {reason}")
+        }
+    }
+}
+
+async fn init_shared_db() -> (ContainerAsync<GenericImage>, String) {
+    // 1. Démarre le conteneur et le client
+    let (node, client, url) = setup_test_container().await;
+    remove_shared_db_container_at_exit(node.id());
+
+    // 2. Nettoie les données existantes (sans supprimer les tables)
+    client
+        .batch_execute(
+            "
+        TRUNCATE TABLE
+            access_control,
+            user_roles,
+            groups,
+            sessions,
+            users
+        RESTART IDENTITY CASCADE;
+    ",
+        )
+        .await
+        .expect("Erreur lors du nettoyage des données");
+
+    // 3. Insertions des données : exécutées une seule fois pour toute la durée des tests.
+    setup_active_session(&client).await;
+    setup_expired_session(&client).await;
+    setup_archived_user_test(&client).await;
+    setup_access_control_data(&client).await;
+
+    println!("✅ Données de test injectées avec succès.");
+    (node, url)
 }

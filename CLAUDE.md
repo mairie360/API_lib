@@ -66,3 +66,7 @@ The crate is organized as independent modules under `src/`, each declared in `li
 - **`env_manager`** — `get_env_var` (returns `Option<String>`) vs `get_critical_env_var` (panics if unset); prefer `get_critical_env_var` for required startup config, matching existing usage.
 
 Much of the existing code (comments, error strings) is still in French; new or rewritten code is written in English (see `../CLAUDE.md`), and the historical `JWTCheckError` messages are kept as-is because Core_API quotes them in its OpenAPI examples.
+
+## Pull request reviewers
+
+Every PR requests a review from the whole team, minus its author: `CarolinHugo`, `LAURETbenjamin`, `MathTek` and `Quentintnrl` (`gh pr create … --reviewer CarolinHugo,LAURETbenjamin,MathTek`). `.github/CODEOWNERS` makes GitHub request them automatically as well.

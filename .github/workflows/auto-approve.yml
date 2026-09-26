@@ -9,6 +9,7 @@ jobs:
       contents: write
     if: github.actor == 'renovate[bot]'
     steps:
+      # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag -- Renovate auto-approve only, not critical
       - uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

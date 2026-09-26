@@ -216,6 +216,7 @@ fn remove_shared_db_container_at_exit(id: &str) {
     if SHARED_DB_CONTAINER_ID.set(id.to_owned()).is_ok() {
         // SAFETY: `remove_shared_db_container` est une fonction `extern "C"` sans argument qui ne
         // panique pas ; `atexit` ne fait que l'enregistrer.
+        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage -- test-only helper, see SAFETY above
         if unsafe { libc::atexit(remove_shared_db_container) } != 0 {
             eprintln!("⚠️ Impossible d'enregistrer la suppression du conteneur de test {id}");
         }

@@ -23,6 +23,9 @@ use jsonwebtoken::{decode_header, AlgorithmFamily};
 /// - [`JWTCheckError::ExpiredToken`] if the token is expired;
 /// - [`JWTCheckError::InvalidToken`] if the token is unreadable, badly signed, not an access
 ///   token, issued for another realm or audience, or a Keycloak token while Keycloak is disabled;
+/// - [`JWTCheckError::RevokedToken`] if a historical token's session (`sid` claim) was revoked;
+/// - [`JWTCheckError::RevocationCheckUnavailable`] if a historical token has a `sid` and Redis
+///   cannot be queried (fail closed);
 /// - [`JWTCheckError::EmailNotVerified`] if a Keycloak token carries no verified e-mail;
 /// - [`JWTCheckError::IdentityProviderUnavailable`] if the realm keys cannot be fetched;
 /// - [`JWTCheckError::DatabaseError`] if the lookup in the database fails;

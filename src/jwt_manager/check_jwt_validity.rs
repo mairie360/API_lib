@@ -4,7 +4,11 @@ use crate::jwt_manager::error::JWTCheckError;
 use crate::jwt_manager::session_revocation::is_session_revoked;
 use crate::smart_db::SmartDatabase;
 
-/// Vérifie qu'un JWT est présent, valide, non expiré et qu'il désigne un utilisateur existant.
+/// Vérifie qu'un JWT signé avec `JWT_SECRET` est présent, valide, non expiré et qu'il désigne un
+/// utilisateur existant.
+///
+/// Ne concerne que les jetons historiques émis par `Core_API` : pour accepter aussi les jetons
+/// Keycloak, utiliser [`super::authenticate_token`].
 ///
 /// # Errors
 ///
@@ -24,7 +28,15 @@ pub async fn check_jwt_validity(
         eprintln!("No JWT token provided.");
         return Err(JWTCheckError::NoTokenProvided);
     }
+    resolve_legacy_user(jwt, db_interface).await.map(|_| ())
+}
 
+/// Same checks as [`check_jwt_validity`] on a non-empty token, returning the `users.id` the
+/// token designates.
+pub(super) async fn resolve_legacy_user(
+    jwt: &str,
+    db_interface: &SmartDatabase,
+) -> Result<u64, JWTCheckError> {
     // 1. Décodage et distinction de l'expiration vs token invalide
     let claims = decode_jwt(jwt).map_err(|err| {
         eprintln!("JWT decode error: {err:?}");
@@ -75,5 +87,5 @@ pub async fn check_jwt_validity(
         return Err(JWTCheckError::UnknownUser);
     }
 
-    Ok(())
+    Ok(parsed_user_id)
 }

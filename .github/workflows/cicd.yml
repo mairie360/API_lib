@@ -6,7 +6,8 @@ on:
 
 jobs:
   CICD:
-    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@v3.0.0
+    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@v3.1.1
     with:
-      cicd_version: v3.0.0
+      cicd_version: v3.1.1
+    # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit -- the called workflow is our own centralized CICD
     secrets: inherit

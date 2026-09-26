@@ -1,3 +1,6 @@
+mod authenticate_token;
+pub use authenticate_token::authenticate_token;
+
 mod check_jwt_validity;
 pub use check_jwt_validity::check_jwt_validity;
 

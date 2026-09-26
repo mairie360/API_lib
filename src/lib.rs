@@ -3,6 +3,8 @@ pub mod email;
 pub mod env_manager;
 pub mod error;
 pub mod jwt_manager;
+pub mod keycloak;
+pub mod password;
 pub mod redis;
 pub mod security;
 pub mod smart_db;

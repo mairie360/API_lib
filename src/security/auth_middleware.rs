@@ -68,14 +68,11 @@ where
                 actix_web::error::ErrorUnauthorized("Unauthorized: No JWT token provided.")
             })?;
 
-            // L'erreur JWT est convertie automatiquement en actix_web::Error grâce à ResponseError
-            check_jwt_validity(&jwt, db_interface)
+            // Historical `JWT_SECRET` token or Keycloak access token, picked from the `alg`
+            // header; the JWT error is turned into an actix_web::Error through ResponseError.
+            let user_id = authenticate_token(&jwt, db_interface, app_state.get_keycloak())
                 .await
                 .map_err(actix_web::Error::from)?;
-
-            let user_id = get_user_id_from_jwt(&jwt)
-                .and_then(|id| id.parse().ok())
-                .unwrap_or(0);
 
             req.extensions_mut()
                 .insert(AuthenticatedUser { id: user_id });

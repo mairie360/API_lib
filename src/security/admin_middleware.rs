@@ -1,7 +1,7 @@
 use crate::security::AuthenticatedUser;
 use crate::{
     database::query_views::IsAdminQueryView,
-    jwt_manager::{check_jwt_validity, get_jwt_from_request, get_user_id_from_jwt},
+    jwt_manager::{authenticate_token, get_jwt_from_request},
     state::AppState,
 };
 use actix_web::{
@@ -75,15 +75,10 @@ where
                 actix_web::error::ErrorUnauthorized("Unauthorized: No JWT token provided.")
             })?;
 
-            check_jwt_validity(&jwt, db_interface)
+            // Historical `JWT_SECRET` token or Keycloak access token, picked from the `alg` header.
+            let user_id = authenticate_token(&jwt, db_interface, app_state.get_keycloak())
                 .await
                 .map_err(actix_web::Error::from)?;
-
-            let user_id_str = get_user_id_from_jwt(&jwt).ok_or_else(|| {
-                actix_web::error::ErrorUnauthorized("Unauthorized: Invalid token payload.")
-            })?;
-
-            let user_id = user_id_str.parse().unwrap_or(0);
             let view = IsAdminQueryView::new(user_id);
 
             let is_admin = db_interface

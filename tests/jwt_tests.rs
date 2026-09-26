@@ -232,3 +232,205 @@ mod jwt_tests {
         );
     }
 }
+
+/**
+ * Tests for `authenticate_token`, which accepts both the historical `JWT_SECRET` tokens and
+ * the Keycloak access tokens (verified against a fake realm, see `test_setup::keycloak_setup`).
+ */
+#[cfg(test)]
+mod authenticate_token_tests {
+    use super::*;
+    use mairie360_api_lib::{
+        database::db_interface::Database,
+        jwt_manager::{authenticate_token, error::JWTCheckError},
+        keycloak::{KeycloakConfig, KeycloakTokenVerifier},
+        redis::redis_interface::Redis,
+        smart_db::SmartDatabase,
+        test_setup::keycloak_setup::{access_token_claims, sign, KeycloakMock, TestKey, CLIENT_ID},
+        test_setup::queries_setup::ALICE_ID,
+    };
+    use serde_json::json;
+
+    async fn smart_db() -> SmartDatabase {
+        let (_container, host) = get_shared_db().await;
+        let db_interface: Database = Database::new(host.as_str()).await;
+        SmartDatabase::new(db_interface, Redis::new(""))
+    }
+
+    fn alice_id() -> u64 {
+        u64::try_from(*ALICE_ID.get().expect("Alice ID not initialized")).unwrap()
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_legacy_token_resolves_the_user_id() {
+        setup();
+        let db = smart_db().await;
+        let token = generate_jwt(&alice_id().to_string(), "test_role").unwrap();
+
+        let result = authenticate_token(&token, &db, None).await;
+
+        assert_eq!(result, Ok(alice_id()));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_legacy_token_of_an_unknown_user_is_refused() {
+        setup();
+        let db = smart_db().await;
+        let token = generate_jwt("8", "test_role").unwrap();
+
+        let result = authenticate_token(&token, &db, None).await;
+
+        assert_eq!(result, Err(JWTCheckError::UnknownUser));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_empty_and_malformed_tokens_are_refused() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+
+        assert_eq!(
+            authenticate_token("", &db, Some(&verifier)).await,
+            Err(JWTCheckError::NoTokenProvided)
+        );
+        assert_eq!(
+            authenticate_token("not.a.token", &db, Some(&verifier)).await,
+            Err(JWTCheckError::InvalidToken)
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_keycloak_token_resolves_the_account_by_email() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+        let token = mock.access_token("alice@example.com");
+
+        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+
+        assert_eq!(result, Ok(alice_id()));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_keycloak_email_match_ignores_case() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+        let token = mock.access_token("Alice@Example.COM");
+
+        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+
+        assert_eq!(result, Ok(alice_id()));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_keycloak_token_is_refused_when_keycloak_is_disabled() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let token = mock.access_token("alice@example.com");
+
+        let result = authenticate_token(&token, &db, None).await;
+
+        assert_eq!(result, Err(JWTCheckError::InvalidToken));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_check_jwt_validity_only_accepts_legacy_tokens() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let token = mock.access_token("alice@example.com");
+
+        let result = check_jwt_validity(&token, &db).await;
+
+        assert_eq!(result, Err(JWTCheckError::InvalidToken));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_keycloak_token_without_matching_account_is_unknown() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+        let token = mock.access_token("nobody@example.com");
+
+        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+
+        assert_eq!(result, Err(JWTCheckError::UnknownUser));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_keycloak_token_of_an_archived_account_is_unknown() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+        // Bob is archived by the shared fixtures.
+        let token = mock.access_token("bob@example.com");
+
+        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+
+        assert_eq!(result, Err(JWTCheckError::UnknownUser));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_expired_keycloak_token_is_expired() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+        let mut claims = access_token_claims(mock.realm_url(), "alice@example.com");
+        claims["exp"] = json!(jsonwebtoken::get_current_timestamp() - 300);
+        let token = sign(&claims, TestKey::A, TestKey::A.kid());
+
+        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+
+        assert_eq!(result, Err(JWTCheckError::ExpiredToken));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_keycloak_token_without_verified_email_is_forbidden() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+        let mut claims = access_token_claims(mock.realm_url(), "alice@example.com");
+        claims["email_verified"] = json!(false);
+        let token = sign(&claims, TestKey::A, TestKey::A.kid());
+
+        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+
+        assert_eq!(result, Err(JWTCheckError::EmailNotVerified));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_unreachable_realm_is_identity_provider_unavailable() {
+        setup();
+        let db = smart_db().await;
+        let realm = "http://127.0.0.1:9/realms/down";
+        let verifier =
+            KeycloakTokenVerifier::new(KeycloakConfig::new(realm, None, CLIENT_ID, None));
+        let claims = access_token_claims(realm, "alice@example.com");
+        let token = sign(&claims, TestKey::A, TestKey::A.kid());
+
+        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+
+        assert_eq!(result, Err(JWTCheckError::IdentityProviderUnavailable));
+    }
+}

@@ -2290,7 +2290,7 @@ dependencies = [
 
 [[package]]
 name = "mairie360_api_lib"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -3235,9 +3235,9 @@ dependencies = [
 
 [[package]]
 name = "resend-rs"
-version = "0.32.3"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb09e08821501fcf3035bea490b429065e4f9b8b50e95632e2c18d21a7d84079"
+checksum = "12a6cea13951ce796799ec1c6d7d0fea35185900d98435a762ae263e5c389b57"
 dependencies = [
  "ecow",
  "getrandom 0.4.3",

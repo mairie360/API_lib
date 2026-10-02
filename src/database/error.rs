@@ -1,5 +1,3 @@
-// Fichier : src/database/error.rs
-
 use actix_web::{http::StatusCode, HttpResponse, ResponseError};
 use thiserror::Error;
 
@@ -82,19 +80,14 @@ impl ResponseError for DbError {
             }
         }
 
-        // --- GÉNÉRATION DE LA RÉPONSE HTTP ---
-        match self {
-            Self::NotFound => HttpResponse::NotFound().body("Ressource non trouvée"),
-            Self::UniqueViolation(msg) => {
-                HttpResponse::Conflict().body(format!("Conflit de données : {msg}"))
-            }
-            Self::ForeignKeyViolation(msg) => {
-                HttpResponse::BadRequest().body(format!("Référence invalide : {msg}"))
-            }
-            Self::MappingError(msg) => {
-                HttpResponse::InternalServerError().body(format!("Erreur de mapping : {msg}"))
-            }
-            _ => HttpResponse::InternalServerError().body("Erreur interne de la base de données"),
-        }
+        // --- HTTP response: generic bodies only. Postgres messages name tables, columns and
+        // constraints, and are logged above instead of being sent to the client (MAIR-391). ---
+        let body = match self {
+            Self::NotFound => "Resource not found",
+            Self::UniqueViolation(_) => "Data conflict: the resource already exists",
+            Self::ForeignKeyViolation(_) => "Invalid reference to another resource",
+            Self::MappingError(_) | Self::Internal(_) | Self::Sqlx(_) => "Internal database error",
+        };
+        HttpResponse::build(self.status_code()).body(body)
     }
 }

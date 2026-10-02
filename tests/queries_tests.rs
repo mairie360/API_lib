@@ -455,3 +455,34 @@ mod queries_tests {
         }
     }
 }
+
+/// `IsUserActiveByIdQueryView` (MAIR-391): the token check refuses archived accounts, while
+/// `DoesUserExistByIdQueryView` still sees them.
+#[cfg(test)]
+mod is_user_active_tests {
+    use mairie360_api_lib::database::db_interface::Database;
+    use mairie360_api_lib::database::query_views::{
+        DoesUserExistByIdQueryView, IsUserActiveByIdQueryView,
+    };
+    use mairie360_api_lib::test_setup::queries_setup::{get_shared_db, ALICE_ID, BOB_ID};
+
+    #[tokio::test]
+    async fn test_archived_accounts_exist_but_are_not_active() {
+        let (_container, url) = get_shared_db().await;
+        let db = Database::new(url).await;
+        let alice = u64::try_from(*ALICE_ID.get().unwrap()).unwrap();
+        let bob = u64::try_from(*BOB_ID.get().unwrap()).unwrap();
+
+        let is_active = |id| IsUserActiveByIdQueryView::new(id);
+        assert!(db.fetch_scalar::<bool, _>(&is_active(alice)).await.unwrap());
+        assert!(!db.fetch_scalar::<bool, _>(&is_active(bob)).await.unwrap());
+        assert!(!db
+            .fetch_scalar::<bool, _>(&is_active(999_999))
+            .await
+            .unwrap());
+        assert!(db
+            .fetch_scalar::<bool, _>(&DoesUserExistByIdQueryView::new(bob))
+            .await
+            .unwrap());
+    }
+}

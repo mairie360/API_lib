@@ -189,6 +189,7 @@ mod error_tests {
 #[cfg(test)]
 mod verifier_tests {
     use super::*;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_valid_access_token_returns_identity() {
@@ -234,7 +235,7 @@ mod verifier_tests {
     #[tokio::test]
     async fn test_rotated_key_is_fetched_once_then_cached() {
         let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
+        let verifier = mock.verifier().with_refresh_interval(Duration::ZERO);
         verifier.verify(&mock.access_token(EMAIL)).await.unwrap();
         mock.publish_keys(&[TestKey::A, TestKey::B]);
         let claims = access_token_claims(mock.realm_url(), EMAIL);
@@ -243,6 +244,52 @@ mod verifier_tests {
         assert!(verifier.verify(&token).await.is_ok());
         assert!(verifier.verify(&token).await.is_ok());
 
+        assert_eq!(mock.jwks_hits(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_unknown_keys_do_not_refetch_the_key_set_within_the_refresh_interval() {
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+        verifier.verify(&mock.access_token(EMAIL)).await.unwrap();
+        let claims = access_token_claims(mock.realm_url(), EMAIL);
+
+        // Forged tokens announcing random key ids must not make the API hammer Keycloak.
+        for kid in ["forged-1", "forged-2", "forged-3"] {
+            let token = sign(&claims, TestKey::B, kid);
+            assert_eq!(
+                verifier.verify(&token).await,
+                Err(KeycloakError::InvalidToken)
+            );
+        }
+
+        assert_eq!(mock.jwks_hits(), 1);
+        assert!(
+            verifier.verify(&mock.access_token(EMAIL)).await.is_ok(),
+            "known keys keep working"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rotated_key_is_picked_up_after_the_refresh_interval() {
+        let mock = KeycloakMock::start();
+        let verifier = mock
+            .verifier()
+            .with_refresh_interval(Duration::from_secs(1));
+        verifier.verify(&mock.access_token(EMAIL)).await.unwrap();
+        mock.publish_keys(&[TestKey::A, TestKey::B]);
+        let token = sign(
+            &access_token_claims(mock.realm_url(), EMAIL),
+            TestKey::B,
+            TestKey::B.kid(),
+        );
+
+        assert_eq!(
+            verifier.verify(&token).await,
+            Err(KeycloakError::InvalidToken)
+        );
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        assert!(verifier.verify(&token).await.is_ok());
         assert_eq!(mock.jwks_hits(), 2);
     }
 

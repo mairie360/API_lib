@@ -215,3 +215,140 @@ mod smart_database_tests {
         );
     }
 }
+
+/// `SmartDatabase::begin` (MAIR-391): several writes applied together or not at all.
+#[cfg(test)]
+mod transaction_tests {
+    use super::*;
+
+    const CACHE_KEY: &str = "test:tx:values";
+
+    #[derive(Debug, Clone, Deserialize)]
+    struct CreateTable;
+
+    impl ApiRequestDto for CreateTable {
+        fn query_sql(&self) -> &'static str {
+            "CREATE TABLE IF NOT EXISTS smart_tx_test (label TEXT NOT NULL)"
+        }
+        fn query_params(&self) -> &[QueryParam] {
+            &[]
+        }
+    }
+
+    #[derive(Debug, Clone, Deserialize)]
+    struct InsertLabel {
+        params: Vec<QueryParam>,
+    }
+
+    impl InsertLabel {
+        fn new(label: &str) -> Self {
+            Self {
+                params: vec![QueryParam::Text(label.to_string())],
+            }
+        }
+    }
+
+    impl ApiRequestDto for InsertLabel {
+        fn query_sql(&self) -> &'static str {
+            "INSERT INTO smart_tx_test (label) VALUES ($1)"
+        }
+        fn query_params(&self) -> &[QueryParam] {
+            &self.params
+        }
+        fn cache_key(&self) -> Option<String> {
+            Some(CACHE_KEY.to_string())
+        }
+    }
+
+    #[derive(Debug, Clone, Deserialize)]
+    struct CountLabel {
+        params: Vec<QueryParam>,
+    }
+
+    impl CountLabel {
+        fn new(label: &str) -> Self {
+            Self {
+                params: vec![QueryParam::Text(label.to_string())],
+            }
+        }
+    }
+
+    impl ApiRequestDto for CountLabel {
+        fn query_sql(&self) -> &'static str {
+            "SELECT count(*) FROM smart_tx_test WHERE label = $1"
+        }
+        fn query_params(&self) -> &[QueryParam] {
+            &self.params
+        }
+    }
+
+    async fn smart_db(redis_url: &str) -> (SmartDatabase, Redis) {
+        let (_db_container, db_host) = get_shared_db().await;
+        let redis = Redis::new(redis_url);
+        let smart_db = SmartDatabase::new(Database::new(db_host.as_str()).await, redis.clone());
+        smart_db.execute(CreateTable).await.unwrap();
+        (smart_db, redis)
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_commit_applies_every_write_then_invalidates_the_cache() {
+        let (_redis_node, redis_config) = start_redis_container().await;
+        let (smart_db, redis) = smart_db(&redis_config.url).await;
+        redis.set(CACHE_KEY, "stale").await.unwrap();
+
+        let mut tx = smart_db.begin().await.unwrap();
+        tx.execute(&InsertLabel::new("commit")).await.unwrap();
+        tx.execute(&InsertLabel::new("commit")).await.unwrap();
+        let seen_inside: i64 = tx.fetch_scalar(&CountLabel::new("commit")).await.unwrap();
+        let seen_outside: i64 = smart_db
+            .fetch_scalar(&CountLabel::new("commit"))
+            .await
+            .unwrap();
+
+        assert_eq!(seen_inside, 2, "the transaction sees its own writes");
+        assert_eq!(seen_outside, 0, "nobody else sees them before the commit");
+        assert!(
+            redis.key_exist(CACHE_KEY).await.unwrap(),
+            "the cache is only invalidated on commit"
+        );
+
+        tx.commit().await.unwrap();
+
+        let committed: i64 = smart_db
+            .fetch_scalar(&CountLabel::new("commit"))
+            .await
+            .unwrap();
+        assert_eq!(committed, 2);
+        assert!(!redis.key_exist(CACHE_KEY).await.unwrap());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_dropped_or_failed_transactions_apply_nothing() {
+        let (_redis_node, redis_config) = start_redis_container().await;
+        let (smart_db, redis) = smart_db(&redis_config.url).await;
+        redis.set(CACHE_KEY, "kept").await.unwrap();
+
+        {
+            let mut tx = smart_db.begin().await.unwrap();
+            tx.execute(&InsertLabel::new("dropped")).await.unwrap();
+            // Dropped without commit, like an early `?` return.
+        }
+        let mut tx = smart_db.begin().await.unwrap();
+        tx.execute(&InsertLabel::new("rolled-back")).await.unwrap();
+        tx.rollback().await.unwrap();
+
+        for label in ["dropped", "rolled-back"] {
+            let count: i64 = smart_db
+                .fetch_scalar(&CountLabel::new(label))
+                .await
+                .unwrap();
+            assert_eq!(count, 0, "{label}");
+        }
+        assert!(
+            redis.key_exist(CACHE_KEY).await.unwrap(),
+            "nothing was written, nothing is invalidated"
+        );
+    }
+}

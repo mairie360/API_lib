@@ -1,5 +1,6 @@
 use crate::{
     database::db_interface::Database,
+    jwt_manager::enforce_jwt_config,
     keycloak::{KeycloakConfig, KeycloakTokenVerifier},
     redis::redis_interface::Redis,
     smart_db::SmartDatabase,
@@ -15,21 +16,33 @@ impl AppState {
     /// Builds the state with Keycloak read from the environment ([`KeycloakConfig::from_env`]):
     /// without `KEYCLOAK_REALM_URL` and `KEYCLOAK_CLIENT_ID`, the middlewares only accept the
     /// historical JWTs signed with `JWT_SECRET`.
+    ///
+    /// # Panics
+    ///
+    /// Same as [`AppState::with_keycloak`].
     pub async fn new(redis_url: String, pg_url: String) -> Self {
         Self::with_keycloak(redis_url, pg_url, KeycloakConfig::from_env()).await
     }
 
     /// Same as [`AppState::new`] with an explicit Keycloak configuration (`None` disables
     /// Keycloak tokens), regardless of the environment.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `JWT_SECRET` / `JWT_TIMEOUT` are missing or weak, see
+    /// [`enforce_jwt_config`] (only logged in builds with the `test-utils` feature).
     pub async fn with_keycloak(
         redis_url: String,
         pg_url: String,
         keycloak: Option<KeycloakConfig>,
     ) -> Self {
-        // --- Initialisation Redis ---
+        // Refuse to start with a missing or forgeable JWT configuration (MAIR-391).
+        enforce_jwt_config();
+
+        // --- Redis ---
         let redis_interface = Redis::new(&redis_url);
 
-        // --- Initialisation PostgreSQL ---
+        // --- PostgreSQL ---
         let db_interface = Database::new(&pg_url).await;
 
         println!("redis status: {:?}", redis_interface.is_connected().await);

@@ -22,4 +22,4 @@ mod identity;
 pub use identity::KeycloakIdentity;
 
 mod verifier;
-pub use verifier::KeycloakTokenVerifier;
+pub use verifier::{KeycloakTokenVerifier, DEFAULT_JWKS_REFRESH_INTERVAL};

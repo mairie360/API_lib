@@ -1,6 +1,10 @@
 use crate::database::db_interface::{id_from_sql, id_to_sql, ApiRequestDto, QueryParam};
 use std::fmt::Display;
 
+/// Returns whether a `users` row with this id exists, **archived accounts included**.
+///
+/// Not an authentication check: tokens are checked with [`super::IsUserActiveByIdQueryView`],
+/// which refuses archived accounts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DoesUserExistByIdQueryView {
     params: Vec<QueryParam>,

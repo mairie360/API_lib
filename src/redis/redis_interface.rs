@@ -323,67 +323,59 @@ impl Redis {
         self.raw_exists(&self.full_key(key)).await
     }
 
+    /// `GET key`, `None` when the key does not exist (a single command, no `EXISTS` race).
+    ///
     /// # Errors
     ///
-    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
-    /// `RedisError::Driver` si Redis rejette la commande.
+    /// Returns `RedisError::Pool` when no connection can be obtained and `RedisError::Driver`
+    /// when Redis rejects the command or the value cannot be read as `T`.
     pub async fn secure_get<T>(&self, key: &str) -> Result<Option<T>, RedisError>
     where
         T: FromRedisValue,
     {
-        let full_key = self.full_key(key);
-        if !self.raw_exists(&full_key).await.unwrap_or(false) {
-            return Ok(None);
-        }
-        self.raw_get::<T>(&full_key)
-            .await
-            .map(Some)
-            .map_err(|e| RedisError::Driver(e.to_string()))
+        self.raw_get::<Option<T>>(&self.full_key(key)).await
     }
 
+    /// Sets `key` only if it does not exist yet (`SET key value NX`, atomic).
+    ///
     /// # Errors
     ///
-    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
-    /// `RedisError::Driver` si Redis rejette la commande.
+    /// Returns `RedisError::Pool` when no connection can be obtained and `RedisError::Driver`
+    /// when Redis rejects the command.
     pub async fn secure_set<V>(&self, key: &str, value: V) -> Result<(), RedisError>
     where
         V: ToSingleRedisArg + Send + Sync,
     {
-        let full_key = self.full_key(key);
-        if self.raw_exists(&full_key).await.unwrap_or(false) {
-            return Ok(());
-        }
-        self.raw_set(&full_key, value)
+        let mut conn = self.connection().await?;
+        // `OK` when written, nil when the key already existed: both are fine.
+        let _: Option<String> = redis::cmd("SET")
+            .arg(self.full_key(key))
+            .arg(value)
+            .arg("NX")
+            .query_async(&mut conn)
             .await
-            .map_err(|e| RedisError::Driver(e.to_string()))
+            .map_err(|e| RedisError::Driver(e.to_string()))?;
+        Ok(())
     }
 
+    /// Deletes `key`; a missing key is not an error (`DEL` is idempotent).
+    ///
     /// # Errors
     ///
-    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
-    /// `RedisError::Driver` si Redis rejette la commande.
+    /// Returns `RedisError::Pool` when no connection can be obtained and `RedisError::Driver`
+    /// when Redis rejects the command.
     pub async fn secure_delete(&self, key: &str) -> Result<(), RedisError> {
-        let full_key = self.full_key(key);
-        if !self.raw_exists(&full_key).await.unwrap_or(false) {
-            return Ok(());
-        }
-        self.raw_delete(&full_key)
-            .await
-            .map_err(|e| RedisError::Driver(e.to_string()))
+        self.raw_delete(&self.full_key(key)).await
     }
 
+    /// Sets the time to live of `key`; a missing key is left alone (`EXPIRE` is a no-op on it).
+    ///
     /// # Errors
     ///
-    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
-    /// `RedisError::Driver` si Redis rejette la commande.
+    /// Returns `RedisError::Pool` when no connection can be obtained and `RedisError::Driver`
+    /// when Redis rejects the command.
     pub async fn secure_expire(&self, key: &str, seconds: u64) -> Result<(), RedisError> {
-        let full_key = self.full_key(key);
-        if !self.raw_exists(&full_key).await.unwrap_or(false) {
-            return Ok(());
-        }
-        self.raw_expire(&full_key, seconds)
-            .await
-            .map_err(|e| RedisError::Driver(e.to_string()))
+        self.raw_expire(&self.full_key(key), seconds).await
     }
 }
 

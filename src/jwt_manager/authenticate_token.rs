@@ -15,7 +15,9 @@ use jsonwebtoken::{decode_header, AlgorithmFamily};
 ///   [`super::check_jwt_validity`] (signature with `JWT_SECRET`, expiry, existing user);
 /// - any other algorithm means a Keycloak access token: it is verified by `keycloak` (see
 ///   [`KeycloakTokenVerifier::verify`]) and its verified e-mail is matched, case-insensitively,
-///   to an active account. Without a verifier (Keycloak not configured) such a token is invalid.
+///   to exactly one active account (ambiguous matches are refused, see
+///   [`GetUserIdByEmailQueryView`]). Without a verifier (Keycloak not configured) such a token is
+///   invalid.
 ///
 /// # Errors
 ///
@@ -29,7 +31,7 @@ use jsonwebtoken::{decode_header, AlgorithmFamily};
 /// - [`JWTCheckError::EmailNotVerified`] if a Keycloak token carries no verified e-mail;
 /// - [`JWTCheckError::IdentityProviderUnavailable`] if the realm keys cannot be fetched;
 /// - [`JWTCheckError::DatabaseError`] if the lookup in the database fails;
-/// - [`JWTCheckError::UnknownUser`] if no active account matches the token.
+/// - [`JWTCheckError::UnknownUser`] if no active account, or more than one, matches the token.
 pub async fn authenticate_token(
     jwt: &str,
     db_interface: &SmartDatabase,
@@ -59,7 +61,7 @@ pub async fn authenticate_token(
         Ok(user_id) => Ok(id_from_sql(user_id)),
         Err(ApiLibError::Database(DbError::NotFound)) => {
             eprintln!(
-                "No active account matches the Keycloak identity {} ({}).",
+                "No single active account matches the Keycloak identity {} ({}).",
                 identity.subject, identity.email
             );
             Err(JWTCheckError::UnknownUser)

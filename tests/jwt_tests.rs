@@ -247,9 +247,41 @@ mod authenticate_token_tests {
         redis::redis_interface::Redis,
         smart_db::SmartDatabase,
         test_setup::keycloak_setup::{access_token_claims, sign, KeycloakMock, TestKey, CLIENT_ID},
-        test_setup::queries_setup::ALICE_ID,
+        test_setup::queries_setup::{seed_password_hash, ALICE_ID, BOB_ID},
     };
     use serde_json::json;
+
+    use mairie360_api_lib::database::db_interface::{ApiRequestDto, QueryParam};
+
+    /// Account registered with Alice's e-mail in upper case (`$1` = password hash).
+    #[derive(serde::Deserialize)]
+    struct InsertAliceCaseTwin {
+        params: Vec<QueryParam>,
+    }
+
+    impl ApiRequestDto for InsertAliceCaseTwin {
+        fn query_sql(&self) -> &'static str {
+            "INSERT INTO users (first_name, last_name, email, password, status) \
+             VALUES ('Mallory', 'Case', 'ALICE@example.com', $1, 'active')"
+        }
+
+        fn query_params(&self) -> &[QueryParam] {
+            &self.params
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct DeleteAliceCaseTwin;
+
+    impl ApiRequestDto for DeleteAliceCaseTwin {
+        fn query_sql(&self) -> &'static str {
+            "DELETE FROM users WHERE email = 'ALICE@example.com'"
+        }
+
+        fn query_params(&self) -> &[QueryParam] {
+            &[]
+        }
+    }
 
     async fn smart_db() -> SmartDatabase {
         let (_container, host) = get_shared_db().await;
@@ -329,6 +361,68 @@ mod authenticate_token_tests {
         let result = authenticate_token(&token, &db, Some(&verifier)).await;
 
         assert_eq!(result, Ok(alice_id()));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_legacy_token_of_an_archived_account_is_refused() {
+        setup();
+        let db = smart_db().await;
+        let bob_id = *BOB_ID.get().expect("Bob ID not initialized");
+        let token = generate_jwt(&bob_id.to_string(), "test_role").unwrap();
+
+        assert_eq!(
+            authenticate_token(&token, &db, None).await,
+            Err(JWTCheckError::UnknownUser)
+        );
+        assert_eq!(
+            check_jwt_validity(&token, &db).await,
+            Err(JWTCheckError::UnknownUser)
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_tokens_without_session_are_refused_when_sessions_are_required() {
+        setup();
+        let db = smart_db().await;
+        let token = generate_jwt(&alice_id().to_string(), "test_role").unwrap();
+
+        // `#[serial]`: no other test of this binary reads the variable meanwhile.
+        env::set_var("JWT_REQUIRE_SESSION", "true");
+        let required = authenticate_token(&token, &db, None).await;
+        env::set_var("JWT_REQUIRE_SESSION", "false");
+        let not_required = authenticate_token(&token, &db, None).await;
+        env::remove_var("JWT_REQUIRE_SESSION");
+
+        assert_eq!(required, Err(JWTCheckError::InvalidToken));
+        assert_eq!(not_required, Ok(alice_id()));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_keycloak_email_matching_several_accounts_up_to_case_is_refused() {
+        setup();
+        let db = smart_db().await;
+        let mock = KeycloakMock::start();
+        let verifier = mock.verifier();
+        let token = mock.access_token("alice@example.com");
+        // Someone registers Alice's e-mail with another case.
+        db.execute(InsertAliceCaseTwin {
+            params: vec![QueryParam::Text(seed_password_hash().to_string())],
+        })
+        .await
+        .unwrap();
+
+        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+
+        db.execute(DeleteAliceCaseTwin).await.unwrap();
+        assert_eq!(result, Err(JWTCheckError::UnknownUser));
+        assert_eq!(
+            authenticate_token(&token, &db, Some(&verifier)).await,
+            Ok(alice_id()),
+            "a single match is accepted again"
+        );
     }
 
     #[tokio::test]

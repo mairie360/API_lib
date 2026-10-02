@@ -1,5 +1,7 @@
 use crate::{
-    database::query_views::HasAccessQueryView, security::AuthenticatedUser, state::AppState,
+    database::{query_views::HasAccessQueryView, SqlId},
+    security::AuthenticatedUser,
+    state::AppState,
 };
 use actix_web::{
     body::BoxBody,
@@ -22,7 +24,7 @@ pub struct AccessCheckConfig {
 ///
 /// - 500 si l'`AccessCheckConfig` ou l'`AppState` est absent de la route, ou si la base échoue ;
 /// - 401 si aucun utilisateur authentifié n'a été injecté ;
-/// - 400 si l'identifiant de l'URL n'est pas un entier ;
+/// - 400 si l'identifiant de l'URL n'est pas un entier, 404 s'il sort de `1..=i32::MAX` ;
 /// - 404 si la ressource n'existe pas, 403 si les droits sont insuffisants.
 pub async fn access_guard_middleware(
     req: ServiceRequest,
@@ -41,12 +43,16 @@ pub async fn access_guard_middleware(
     let mut instance_id: Option<u64> = None;
     if let Some(param_name) = config.id_param_pattern {
         if let Some(val) = req.match_info().get(param_name) {
-            instance_id = val.parse::<u64>().ok();
-            if instance_id.is_none() {
+            if val.is_empty() || !val.bytes().all(|b| b.is_ascii_digit()) {
                 return Err(actix_web::error::ErrorBadRequest(
                     "Invalid ID format in URL",
                 ));
             }
+            // An integer Postgres cannot hold names no row (MAIR-422): 404, never an alias.
+            let id = val
+                .parse::<SqlId>()
+                .map_err(|_| actix_web::error::ErrorNotFound("Resource not found"))?;
+            instance_id = Some(id.as_u64());
         }
     }
 

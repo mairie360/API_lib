@@ -270,12 +270,14 @@ mod authenticate_token_tests {
         }
     }
 
+    /// Drops the case-insensitive e-mail unique index added by Database v1.7.0 (MAIR-413), so a
+    /// test transaction can recreate the duplicates older schemas allowed. No-op on them.
     #[derive(serde::Deserialize)]
-    struct DeleteAliceCaseTwin;
+    struct DropCaseInsensitiveEmailIndex;
 
-    impl ApiRequestDto for DeleteAliceCaseTwin {
+    impl ApiRequestDto for DropCaseInsensitiveEmailIndex {
         fn query_sql(&self) -> &'static str {
-            "DELETE FROM users WHERE email = 'ALICE@example.com'"
+            "DROP INDEX IF EXISTS uq_users_email_lower"
         }
 
         fn query_params(&self) -> &[QueryParam] {
@@ -402,26 +404,34 @@ mod authenticate_token_tests {
     #[tokio::test]
     #[serial]
     async fn test_keycloak_email_matching_several_accounts_up_to_case_is_refused() {
+        use mairie360_api_lib::database::{error::DbError, query_views::GetUserIdByEmailQueryView};
+        use mairie360_api_lib::error::ApiLibError;
+
         setup();
         let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
-        let token = mock.access_token("alice@example.com");
-        // Someone registers Alice's e-mail with another case.
-        db.execute(InsertAliceCaseTwin {
+        let lookup = GetUserIdByEmailQueryView::new("alice@example.com");
+        // Recent schemas forbid such duplicates (`uq_users_email_lower`); the lib must still refuse
+        // them on older ones. Everything happens in a transaction rolled back at the end.
+        let mut tx = db.begin().await.unwrap();
+        tx.execute(&DropCaseInsensitiveEmailIndex).await.unwrap();
+        tx.execute(&InsertAliceCaseTwin {
             params: vec![QueryParam::Text(seed_password_hash().to_string())],
         })
         .await
         .unwrap();
 
-        let result = authenticate_token(&token, &db, Some(&verifier)).await;
+        let ambiguous = tx.fetch_scalar::<i32, _>(&lookup).await;
 
-        db.execute(DeleteAliceCaseTwin).await.unwrap();
-        assert_eq!(result, Err(JWTCheckError::UnknownUser));
+        tx.rollback().await.unwrap();
+        assert!(
+            matches!(ambiguous, Err(ApiLibError::Database(DbError::NotFound))),
+            "two accounts matching up to case must give no match, got {ambiguous:?}"
+        );
+        let single = db.fetch_scalar::<i32, _>(&lookup).await.unwrap();
         assert_eq!(
-            authenticate_token(&token, &db, Some(&verifier)).await,
-            Ok(alice_id()),
-            "a single match is accepted again"
+            u64::try_from(single).unwrap(),
+            alice_id(),
+            "a single match is accepted"
         );
     }
 

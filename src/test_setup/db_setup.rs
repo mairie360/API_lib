@@ -29,12 +29,12 @@ pub struct TestDbConfig {
     pub port: u16,
 }
 
-/// Lance les migrations Liquibase via ton image personnalisée
+/// Runs the Liquibase migrations of the `liquibase-migrations` image against `container`.
 ///
 /// # Panics
 ///
-/// Panique si le conteneur ou la base de test ne peut pas être préparé : un test ne peut pas
-/// continuer sans son environnement.
+/// Panics if the container cannot be started or the migrations fail: a test cannot go on
+/// without its schema.
 pub async fn run_migrations(container: &ContainerAsync<GenericImage>) {
     let port = container
         .get_host_port_ipv4(POSTGRES_PORT.tcp())
@@ -58,6 +58,10 @@ pub async fn run_migrations(container: &ContainerAsync<GenericImage>) {
             "postgres",
             "--changelog-file",
             "changelog.xml", // Relatif à /migrations
+            // Since Database v1.7.0 (MAIR-413) the admin account (users.id = 1) is seeded from
+            // -Dadmin_email / -Dadmin_password, or from the public template account with this
+            // flag (dev and test stacks only); without either the migration stops half-way.
+            "-Dallow_template_admin=true",
         ])
         .start()
         .await
@@ -72,6 +76,19 @@ pub async fn run_migrations(container: &ContainerAsync<GenericImage>) {
     let stderr = liquibase_node.stderr_to_vec().await.unwrap_or_default();
     println!("STDOUT: {}", String::from_utf8_lossy(&stdout));
     eprintln!("STDERR: {}", String::from_utf8_lossy(&stderr));
+
+    // A failed migration leaves a half-built schema (missing functions, grants...): fail the setup
+    // instead of letting every test fail later on an unrelated-looking error.
+    let exit_code = liquibase_node
+        .exit_code()
+        .await
+        .expect("Failed to read the Liquibase exit code");
+    assert_eq!(
+        exit_code,
+        Some(0),
+        "Liquibase migrations failed (image {}), see STDOUT/STDERR above",
+        db_version()
+    );
 
     println!("✅ Fin du container Liquibase.");
 }

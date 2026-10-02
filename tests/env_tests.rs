@@ -71,3 +71,17 @@ mod env_tests {
         let _ = get_critical_env_var("NON_EXISTENT_KEY");
     }
 }
+
+#[test]
+fn api_docs_follow_the_environment() {
+    use mairie360_api_lib::env_manager::{api_docs_enabled, API_DOCS_ENABLED};
+    temp_env::with_var(API_DOCS_ENABLED, None::<&str>, || {
+        assert!(!api_docs_enabled());
+    });
+    temp_env::with_var(API_DOCS_ENABLED, Some("true"), || {
+        assert!(api_docs_enabled());
+    });
+    temp_env::with_var(API_DOCS_ENABLED, Some("false"), || {
+        assert!(!api_docs_enabled());
+    });
+}

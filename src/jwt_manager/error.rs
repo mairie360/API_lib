@@ -70,16 +70,20 @@ impl ResponseError for JWTCheckError {
             | Self::RevokedToken
             | Self::EmailNotVerified => {}
             Self::InvalidToken => {
-                eprintln!("[AVERTISSEMENT SÉCURITÉ] Tentative d'accès avec un jeton JWT altéré ou invalide.");
+                tracing::warn!("Access attempted with a forged or invalid JWT.");
             }
             Self::IdentityProviderUnavailable => {
-                eprintln!("[ERREUR CRITIQUE KEYCLOAK] Impossible de récupérer les clés du realm pour vérifier le jeton.");
+                tracing::error!(
+                    "Keycloak realm keys unreachable: the token could not be verified."
+                );
             }
             Self::DatabaseError => {
-                eprintln!("[ERREUR CRITIQUE JWT] Échec de la base de données lors de la vérification de l'utilisateur.");
+                tracing::error!("Database failure while checking the token's user.");
             }
             Self::RevocationCheckUnavailable => {
-                eprintln!("[CRITICAL JWT] Redis unavailable: cannot check the token revocation list, token refused.");
+                tracing::error!(
+                    "Redis unavailable: cannot check the token revocation list, token refused."
+                );
             }
         }
 

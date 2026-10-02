@@ -23,16 +23,16 @@ impl ResponseError for RedisError {
     fn error_response(&self) -> HttpResponse {
         match self {
             Self::Pool(msg) => {
-                eprintln!("[ERREUR CRITIQUE REDIS] Échec du pool de connexions : {msg}");
+                tracing::error!(error = %msg, "Redis connection pool failure");
             }
             Self::Driver(msg) => {
-                eprintln!("[ERREUR CRITIQUE REDIS] Erreur du driver lors de l'exécution d'une commande : {msg}");
+                tracing::error!(error = %msg, "Redis command failed");
             }
             Self::Internal(msg) => {
-                eprintln!("[ERREUR CRITIQUE REDIS] Erreur interne : {msg}");
+                tracing::error!(error = %msg, "Redis internal error");
             }
             Self::Value(msg) => {
-                eprintln!("[AVERTISSEMENT REDIS] Problème de désérialisation ou de valeur : {msg}");
+                tracing::warn!(error = %msg, "Unexpected Redis value");
             }
         }
 

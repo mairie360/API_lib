@@ -79,7 +79,7 @@ impl Redis {
         let redis_pool = match redis_cfg.create_pool(Some(Runtime::Tokio1)) {
             Ok(pool) => Some(pool),
             Err(e) => {
-                eprintln!("Failed to connect to Redis: {e}");
+                tracing::error!(error = %e, "Failed to connect to Redis");
                 None
             }
         };
@@ -124,7 +124,7 @@ impl Redis {
         let pool = match redis_cfg.create_pool(Some(Runtime::Tokio1)) {
             Ok(pool) => pool,
             Err(e) => {
-                eprintln!("Failed to connect to Redis: {e}");
+                tracing::error!(error = %e, "Failed to connect to Redis");
                 return Err(PoolError::Closed);
             }
         };

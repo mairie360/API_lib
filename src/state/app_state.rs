@@ -45,15 +45,19 @@ impl AppState {
         // --- PostgreSQL ---
         let db_interface = Database::new(&pg_url).await;
 
-        println!("redis status: {:?}", redis_interface.is_connected().await);
-        println!("pg status: {:?}", db_interface.is_connected().await);
-        match &keycloak {
-            Some(config) => println!(
+        tracing::info!(
+            connected = redis_interface.is_connected().await,
+            "redis status"
+        );
+        tracing::info!(connected = db_interface.is_connected().await, "pg status");
+        if let Some(config) = &keycloak {
+            tracing::info!(
                 "keycloak status: enabled (issuer {}, audiences {:?})",
                 config.issuer(),
                 config.audiences()
-            ),
-            None => println!("keycloak status: disabled (JWT_SECRET tokens only)"),
+            );
+        } else {
+            tracing::info!("keycloak status: disabled (JWT_SECRET tokens only)");
         }
 
         // `Redis` encapsule un `Arc` interne : le clone partage le même pool et le

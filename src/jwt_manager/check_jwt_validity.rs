@@ -27,7 +27,7 @@ pub async fn check_jwt_validity(
     db_interface: &SmartDatabase,
 ) -> Result<(), JWTCheckError> {
     if jwt.is_empty() {
-        eprintln!("No JWT token provided.");
+        tracing::debug!("No JWT token provided.");
         return Err(JWTCheckError::NoTokenProvided);
     }
     resolve_legacy_user(jwt, db_interface).await.map(|_| ())
@@ -41,7 +41,7 @@ pub(super) async fn resolve_legacy_user(
 ) -> Result<u64, JWTCheckError> {
     // 1. Décodage et distinction de l'expiration vs token invalide
     let claims = decode_jwt(jwt).map_err(|err| {
-        eprintln!("JWT decode error: {err:?}");
+        tracing::warn!(error = ?err, "JWT decode error");
         if matches!(
             err.kind(),
             jsonwebtoken::errors::ErrorKind::ExpiredSignature
@@ -55,7 +55,7 @@ pub(super) async fn resolve_legacy_user(
     // 2. Extraction et parsing de l'ID utilisateur
     let user_id_str = claims.user_id();
     let parsed_user_id: u64 = user_id_str.parse().map_err(|_| {
-        eprintln!("Failed to parse user ID from JWT claims.");
+        tracing::warn!("Failed to parse user ID from JWT claims.");
         JWTCheckError::InvalidToken
     })?;
 
@@ -64,14 +64,14 @@ pub(super) async fn resolve_legacy_user(
     // client should retry rather than drop its session. Tokens without a session are refused
     // outright when `JWT_REQUIRE_SESSION` is enabled.
     if claims.session_id().is_none() && is_session_required() {
-        eprintln!("JWT without session (`sid`) refused: {REQUIRE_SESSION_ENV} is enabled.");
+        tracing::info!("JWT without session (`sid`) refused: {REQUIRE_SESSION_ENV} is enabled.");
         return Err(JWTCheckError::InvalidToken);
     }
     if let Some(session_id) = claims.session_id() {
         let revoked = is_session_revoked(&db_interface.get_redis(), session_id)
             .await
             .map_err(|e| {
-                eprintln!("Revocation lookup error: {e}");
+                tracing::error!(error = %e, "Revocation lookup error");
                 JWTCheckError::RevocationCheckUnavailable
             })?;
         if revoked {
@@ -85,12 +85,12 @@ pub(super) async fn resolve_legacy_user(
         .fetch_scalar::<bool, _>(&query_view)
         .await
         .map_err(|e| {
-            eprintln!("Database query error: {e}");
+            tracing::error!(error = %e, "Database query error");
             JWTCheckError::DatabaseError
         })?;
 
     if !exist {
-        eprintln!("No active account with ID: {user_id_str}");
+        tracing::info!(user_id = %user_id_str, "No active account with this ID");
         return Err(JWTCheckError::UnknownUser);
     }
 

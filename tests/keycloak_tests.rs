@@ -218,7 +218,7 @@ mod verifier_tests {
         let identity = mock.verifier().verify(&token).await.unwrap();
 
         assert_eq!(identity.email, EMAIL);
-        assert!(identity.roles.is_empty());
+        assert_eq!(identity.roles, Vec::<String>::new());
     }
 
     #[tokio::test]

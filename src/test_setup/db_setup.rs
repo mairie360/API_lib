@@ -12,7 +12,7 @@ use tokio_postgres::NoTls;
 ///
 /// Pinned to the latest published `dev-<sha>` image: no release carries the fix of the admin seed
 /// (MAIR-307) and the `user_identities` table (MAIR-141) yet.
-const DEFAULT_DB_VERSION: &str = "dev-0aaede5";
+const DEFAULT_DB_VERSION: &str = "dev-fb7c223";
 
 /// Port interne du conteneur Postgres, publié sur un port hôte aléatoire.
 const POSTGRES_PORT: u16 = 5432;

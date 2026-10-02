@@ -2290,6 +2290,7 @@ dependencies = [
  "chrono",
  "deadpool-redis",
  "futures-util",
+ "governor",
  "jsonwebtoken",
  "libc",
  "mairie360_api_lib",

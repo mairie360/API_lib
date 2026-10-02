@@ -64,6 +64,9 @@ pub fn resolve_key_prefix(redis_url: &str) -> Option<String> {
         .or_else(|| std::env::var("REDIS_USERNAME").ok().and_then(non_empty))
 }
 
+/// Key read by [`Redis::ping`]: its value does not matter, only the round-trip does.
+const READINESS_PROBE_KEY: &str = "readiness-probe";
+
 impl Redis {
     /// Client for `redis_url`, with the key prefix resolved from the environment
     /// ([`resolve_key_prefix`]).
@@ -321,6 +324,16 @@ impl Redis {
     /// `RedisError::Driver` si Redis rejette la commande.
     pub async fn key_exist(&self, key: &str) -> Result<bool, RedisError> {
         self.raw_exists(&self.full_key(key)).await
+    }
+
+    /// One round-trip to Redis (readiness, MAIR-423). `EXISTS` on a key of the role's own prefix
+    /// rather than `PING`, which the chart's ACL does not grant.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`RedisError`] when no connection can be obtained or the command fails.
+    pub async fn ping(&self) -> Result<(), RedisError> {
+        self.key_exist(READINESS_PROBE_KEY).await.map(|_| ())
     }
 
     /// `GET key`, `None` when the key does not exist (a single command, no `EXISTS` race).

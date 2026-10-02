@@ -33,6 +33,12 @@ pub use get_user_id_from_jwt::get_user_id_from_jwt;
 mod jwt_claims;
 pub use jwt_claims::Claims;
 
+mod validate_jwt_config;
+pub use validate_jwt_config::{
+    enforce_jwt_config, is_session_required, validate_jwt_config, JwtConfigError,
+    ALLOW_WEAK_SECRET_ENV, MIN_JWT_SECRET_LEN, REQUIRE_SESSION_ENV,
+};
+
 mod session_revocation;
 pub use session_revocation::{
     is_session_revoked, revoke_session, revoked_session_key, REVOKED_SESSION_KEY_PREFIX,

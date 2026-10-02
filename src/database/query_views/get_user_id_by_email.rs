@@ -5,9 +5,11 @@ use std::fmt::Display;
 /// (Keycloak) and returns its `users.id`.
 ///
 /// The match ignores case, since Keycloak lowercases e-mails while accounts created in Core
-/// keep the case they were typed with; an exact match wins if several accounts only differ by
-/// case (the `users.email` constraint is case-sensitive). Archived accounts are excluded: the
-/// query then returns no row (`DbError::NotFound`).
+/// keep the case they were typed with. The `users.email` constraint is case-sensitive, though,
+/// so several active accounts can match up to case: the match is then **refused** (no row,
+/// `DbError::NotFound`) instead of picking one, otherwise whoever registers a colleague's e-mail
+/// with another case would receive the colleague's Keycloak logins (MAIR-391). Archived accounts
+/// are excluded and never make a match ambiguous.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GetUserIdByEmailQueryView {
     params: Vec<QueryParam>,
@@ -29,10 +31,9 @@ impl GetUserIdByEmailQueryView {
 
 impl ApiRequestDto for GetUserIdByEmailQueryView {
     fn query_sql(&self) -> &'static str {
-        "SELECT id FROM users \
+        "SELECT (array_agg(id))[1] FROM users \
          WHERE lower(email) = lower($1) AND NOT COALESCE(is_archived, false) \
-         ORDER BY (email = $1) DESC, id \
-         LIMIT 1"
+         HAVING count(*) = 1"
     }
 
     fn query_params(&self) -> &[QueryParam] {

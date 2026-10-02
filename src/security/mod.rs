@@ -1,5 +1,7 @@
 mod admin_middleware;
 pub use admin_middleware::AdminMiddleware;
+mod admin_user;
+pub use admin_user::AdminUser;
 mod auth_middleware;
 pub use auth_middleware::JwtMiddleware;
 mod auth_user;

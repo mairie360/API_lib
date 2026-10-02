@@ -228,14 +228,7 @@ impl Database {
     /// lié ou si Postgres rejette la requête.
     pub async fn execute<Q: ApiRequestDto>(&self, query: &Q) -> Result<(), DbError> {
         let pool = self.get_pool().await?;
-        let params = query.query_params();
-        let args = build_arguments(params)?;
-
-        sqlx::query_with(sqlx::AssertSqlSafe(query.query_sql()), args)
-            .execute(&pool)
-            .await?;
-
-        Ok(())
+        execute_on(&pool, query).await
     }
 
     /// L'API demande un seul résultat (équivalent à `fetch_one` de sqlx)
@@ -250,20 +243,7 @@ impl Database {
         T: DeserializeOwned,
     {
         let pool = self.get_pool().await?;
-
-        let params = query.query_params();
-        let args = build_arguments(params)?;
-
-        let json_val: serde_json::Value =
-            sqlx::query_scalar_with(sqlx::AssertSqlSafe(query.query_sql()), args)
-                .fetch_one(&pool)
-                .await?;
-
-        // Serde transforme le JSON directement dans le DTO de l'API
-        let item: T =
-            serde_json::from_value(json_val).map_err(|e| DbError::MappingError(e.to_string()))?;
-
-        Ok(item)
+        fetch_one_on(&pool, query).await
     }
 
     /// Renvoie toutes les lignes, chacune décodée depuis une colonne JSON.
@@ -278,24 +258,7 @@ impl Database {
         T: DeserializeOwned,
     {
         let pool = self.get_pool().await?;
-
-        let params = query.query_params();
-        let args = build_arguments(params)?;
-
-        // Récupère une liste de valeurs JSON (une par ligne)
-        let json_values: Vec<serde_json::Value> =
-            sqlx::query_scalar_with(sqlx::AssertSqlSafe(query.query_sql()), args)
-                .fetch_all(&pool)
-                .await?;
-
-        let mut items = Vec::new();
-        for json_val in json_values {
-            let item: T = serde_json::from_value(json_val)
-                .map_err(|e| DbError::MappingError(e.to_string()))?;
-            items.push(item);
-        }
-
-        Ok(items)
+        fetch_all_on(&pool, query).await
     }
 
     /// Renvoie une valeur scalaire unique décodée directement par sqlx.
@@ -308,18 +271,150 @@ impl Database {
     pub async fn fetch_scalar<T, Q>(&self, query: &Q) -> Result<T, DbError>
     where
         Q: ApiRequestDto,
-        // Contraintes nécessaires pour que sqlx sache décoder un type scalaire (ex: bool, i64)
         T: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send + Unpin,
     {
         let pool = self.get_pool().await?;
-        let params = query.query_params();
-        let args = build_arguments(params)?;
-
-        // Utilisation de query_scalar_with pour exécuter la requête avec les arguments dynamiques
-        let result = sqlx::query_scalar_with(sqlx::AssertSqlSafe(query.query_sql()), args)
-            .fetch_one(&pool)
-            .await?;
-
-        Ok(result)
+        fetch_scalar_on(&pool, query).await
     }
+
+    /// Starts a transaction: the queries run through the returned [`DbTransaction`] are applied
+    /// all together on [`DbTransaction::commit`], or not at all.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`DbError`] if no connection can be obtained or `BEGIN` fails.
+    pub async fn begin(&self) -> Result<DbTransaction, DbError> {
+        let pool = self.get_pool().await?;
+        Ok(DbTransaction {
+            tx: pool.begin().await?,
+        })
+    }
+}
+
+/// A Postgres transaction opened by [`Database::begin`].
+///
+/// Same query methods as [`Database`], all run on the transaction's connection. Dropping it
+/// without calling [`Self::commit`] rolls it back (early return on `?` included).
+pub struct DbTransaction {
+    tx: sqlx::Transaction<'static, sqlx::Postgres>,
+}
+
+impl DbTransaction {
+    /// # Errors
+    ///
+    /// Same as [`Database::execute`].
+    pub async fn execute<Q: ApiRequestDto>(&mut self, query: &Q) -> Result<(), DbError> {
+        execute_on(&mut *self.tx, query).await
+    }
+
+    /// # Errors
+    ///
+    /// Same as [`Database::fetch_one`].
+    pub async fn fetch_one<T, Q: ApiRequestDto>(&mut self, query: &Q) -> Result<T, DbError>
+    where
+        T: DeserializeOwned,
+    {
+        fetch_one_on(&mut *self.tx, query).await
+    }
+
+    /// # Errors
+    ///
+    /// Same as [`Database::fetch_all`].
+    pub async fn fetch_all<T, Q: ApiRequestDto>(&mut self, query: &Q) -> Result<Vec<T>, DbError>
+    where
+        T: DeserializeOwned,
+    {
+        fetch_all_on(&mut *self.tx, query).await
+    }
+
+    /// # Errors
+    ///
+    /// Same as [`Database::fetch_scalar`].
+    pub async fn fetch_scalar<T, Q>(&mut self, query: &Q) -> Result<T, DbError>
+    where
+        Q: ApiRequestDto,
+        T: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send + Unpin,
+    {
+        fetch_scalar_on(&mut *self.tx, query).await
+    }
+
+    /// Applies every query of the transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`DbError`] if `COMMIT` fails (e.g. a deferred constraint); nothing is applied.
+    pub async fn commit(self) -> Result<(), DbError> {
+        self.tx.commit().await.map_err(DbError::from)
+    }
+
+    /// Discards every query of the transaction (same as dropping it, but awaited).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`DbError`] if `ROLLBACK` fails.
+    pub async fn rollback(self) -> Result<(), DbError> {
+        self.tx.rollback().await.map_err(DbError::from)
+    }
+}
+
+// --- Queries on any executor: the pool, or the connection of a transaction ---
+
+async fn execute_on<'e, E, Q>(executor: E, query: &Q) -> Result<(), DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    Q: ApiRequestDto,
+{
+    let args = build_arguments(query.query_params())?;
+    sqlx::query_with(sqlx::AssertSqlSafe(query.query_sql()), args)
+        .execute(executor)
+        .await?;
+    Ok(())
+}
+
+async fn fetch_one_on<'e, E, T, Q>(executor: E, query: &Q) -> Result<T, DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    T: DeserializeOwned,
+    Q: ApiRequestDto,
+{
+    let args = build_arguments(query.query_params())?;
+    let json_val: serde_json::Value =
+        sqlx::query_scalar_with(sqlx::AssertSqlSafe(query.query_sql()), args)
+            .fetch_one(executor)
+            .await?;
+    // Serde transforme le JSON directement dans le DTO de l'API
+    serde_json::from_value(json_val).map_err(|e| DbError::MappingError(e.to_string()))
+}
+
+async fn fetch_all_on<'e, E, T, Q>(executor: E, query: &Q) -> Result<Vec<T>, DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    T: DeserializeOwned,
+    Q: ApiRequestDto,
+{
+    let args = build_arguments(query.query_params())?;
+    // Récupère une liste de valeurs JSON (une par ligne)
+    let json_values: Vec<serde_json::Value> =
+        sqlx::query_scalar_with(sqlx::AssertSqlSafe(query.query_sql()), args)
+            .fetch_all(executor)
+            .await?;
+    json_values
+        .into_iter()
+        .map(|json_val| {
+            serde_json::from_value(json_val).map_err(|e| DbError::MappingError(e.to_string()))
+        })
+        .collect()
+}
+
+async fn fetch_scalar_on<'e, E, T, Q>(executor: E, query: &Q) -> Result<T, DbError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    Q: ApiRequestDto,
+    T: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send + Unpin,
+{
+    let args = build_arguments(query.query_params())?;
+    let result = sqlx::query_scalar_with(sqlx::AssertSqlSafe(query.query_sql()), args)
+        .fetch_one(executor)
+        .await?;
+    Ok(result)
 }

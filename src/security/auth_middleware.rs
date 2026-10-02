@@ -70,9 +70,13 @@ where
 
             // Historical `JWT_SECRET` token or Keycloak access token, picked from the `alg`
             // header; the JWT error is turned into an actix_web::Error through ResponseError.
-            let user_id = authenticate_token(&jwt, db_interface, app_state.get_keycloak())
-                .await
-                .map_err(actix_web::Error::from)?;
+            let user_id = Box::pin(authenticate_token(
+                &jwt,
+                db_interface,
+                app_state.get_keycloak(),
+            ))
+            .await
+            .map_err(actix_web::Error::from)?;
 
             req.extensions_mut()
                 .insert(AuthenticatedUser { id: user_id });

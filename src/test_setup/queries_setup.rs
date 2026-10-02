@@ -203,6 +203,8 @@ pub async fn setup_access_control_data(client: &Client) {
 
         CREATE TABLE IF NOT EXISTS document (id SERIAL PRIMARY KEY, owner_id INT);
         INSERT INTO document (owner_id) VALUES ({alice_id});
+        -- check_access only checks resources declared in `resources` (-1 otherwise, MAIR-413).
+        INSERT INTO resources (name) VALUES ('document') ON CONFLICT (name) DO NOTHING;
 
         INSERT INTO groups (owner_id, name)
         VALUES ({owner_id}, 'Seeded Group') ON CONFLICT DO NOTHING;

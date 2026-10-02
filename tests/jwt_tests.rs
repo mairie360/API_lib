@@ -247,9 +247,43 @@ mod authenticate_token_tests {
         redis::redis_interface::Redis,
         smart_db::SmartDatabase,
         test_setup::keycloak_setup::{access_token_claims, sign, KeycloakMock, TestKey, CLIENT_ID},
-        test_setup::queries_setup::ALICE_ID,
+        test_setup::queries_setup::{seed_password_hash, ALICE_ID, BOB_ID},
     };
     use serde_json::json;
+
+    use mairie360_api_lib::database::db_interface::{ApiRequestDto, QueryParam};
+
+    /// Account registered with Alice's e-mail in upper case (`$1` = password hash).
+    #[derive(serde::Deserialize)]
+    struct InsertAliceCaseTwin {
+        params: Vec<QueryParam>,
+    }
+
+    impl ApiRequestDto for InsertAliceCaseTwin {
+        fn query_sql(&self) -> &'static str {
+            "INSERT INTO users (first_name, last_name, email, password, status) \
+             VALUES ('Mallory', 'Case', 'ALICE@example.com', $1, 'active')"
+        }
+
+        fn query_params(&self) -> &[QueryParam] {
+            &self.params
+        }
+    }
+
+    /// Drops the case-insensitive e-mail unique index added by Database v1.7.0 (MAIR-413), so a
+    /// test transaction can recreate the duplicates older schemas allowed. No-op on them.
+    #[derive(serde::Deserialize)]
+    struct DropCaseInsensitiveEmailIndex;
+
+    impl ApiRequestDto for DropCaseInsensitiveEmailIndex {
+        fn query_sql(&self) -> &'static str {
+            "DROP INDEX IF EXISTS uq_users_email_lower"
+        }
+
+        fn query_params(&self) -> &[QueryParam] {
+            &[]
+        }
+    }
 
     async fn smart_db() -> SmartDatabase {
         let (_container, host) = get_shared_db().await;
@@ -329,6 +363,76 @@ mod authenticate_token_tests {
         let result = authenticate_token(&token, &db, Some(&verifier)).await;
 
         assert_eq!(result, Ok(alice_id()));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_legacy_token_of_an_archived_account_is_refused() {
+        setup();
+        let db = smart_db().await;
+        let bob_id = *BOB_ID.get().expect("Bob ID not initialized");
+        let token = generate_jwt(&bob_id.to_string(), "test_role").unwrap();
+
+        assert_eq!(
+            authenticate_token(&token, &db, None).await,
+            Err(JWTCheckError::UnknownUser)
+        );
+        assert_eq!(
+            check_jwt_validity(&token, &db).await,
+            Err(JWTCheckError::UnknownUser)
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_tokens_without_session_are_refused_when_sessions_are_required() {
+        setup();
+        let db = smart_db().await;
+        let token = generate_jwt(&alice_id().to_string(), "test_role").unwrap();
+
+        // `#[serial]`: no other test of this binary reads the variable meanwhile.
+        env::set_var("JWT_REQUIRE_SESSION", "true");
+        let required = authenticate_token(&token, &db, None).await;
+        env::set_var("JWT_REQUIRE_SESSION", "false");
+        let not_required = authenticate_token(&token, &db, None).await;
+        env::remove_var("JWT_REQUIRE_SESSION");
+
+        assert_eq!(required, Err(JWTCheckError::InvalidToken));
+        assert_eq!(not_required, Ok(alice_id()));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_keycloak_email_matching_several_accounts_up_to_case_is_refused() {
+        use mairie360_api_lib::database::{error::DbError, query_views::GetUserIdByEmailQueryView};
+        use mairie360_api_lib::error::ApiLibError;
+
+        setup();
+        let db = smart_db().await;
+        let lookup = GetUserIdByEmailQueryView::new("alice@example.com");
+        // Recent schemas forbid such duplicates (`uq_users_email_lower`); the lib must still refuse
+        // them on older ones. Everything happens in a transaction rolled back at the end.
+        let mut tx = db.begin().await.unwrap();
+        tx.execute(&DropCaseInsensitiveEmailIndex).await.unwrap();
+        tx.execute(&InsertAliceCaseTwin {
+            params: vec![QueryParam::Text(seed_password_hash().to_string())],
+        })
+        .await
+        .unwrap();
+
+        let ambiguous = tx.fetch_scalar::<i32, _>(&lookup).await;
+
+        tx.rollback().await.unwrap();
+        assert!(
+            matches!(ambiguous, Err(ApiLibError::Database(DbError::NotFound))),
+            "two accounts matching up to case must give no match, got {ambiguous:?}"
+        );
+        let single = db.fetch_scalar::<i32, _>(&lookup).await.unwrap();
+        assert_eq!(
+            u64::try_from(single).unwrap(),
+            alice_id(),
+            "a single match is accepted"
+        );
     }
 
     #[tokio::test]

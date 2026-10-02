@@ -1,4 +1,4 @@
-use crate::security::AuthenticatedUser;
+use crate::security::{AdminUser, AuthenticatedUser};
 use crate::{
     database::query_views::IsAdminQueryView,
     jwt_manager::{authenticate_token, get_jwt_from_request},
@@ -16,8 +16,23 @@ use std::rc::Rc;
 use std::sync::LazyLock;
 
 static ADMIN_PATH_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"/api/v\d+/admin").expect("regex des routes admin invalide"));
+    LazyLock::new(|| Regex::new(r"/api/v\d+/admin").expect("invalid admin route regex"));
 
+/// Returns `true` when the request targets an admin route (`/api/v<n>/admin...`).
+///
+/// The check runs on the path **as the router sees it** (`match_info`, percent-decoded the same
+/// way actix decodes it before routing), and on the raw path as well: matching only the raw
+/// `req.path()` let `/api/v1/%61dmin/users` reach the admin handlers unchecked (MAIR-391).
+fn is_admin_request(req: &ServiceRequest) -> bool {
+    ADMIN_PATH_REGEX.is_match(req.match_info().as_str()) || ADMIN_PATH_REGEX.is_match(req.path())
+}
+
+/// Requires an authenticated **administrator** (`is_admin()` in the database) on every admin
+/// route (`/api/v<n>/admin...`) and lets the other routes through untouched.
+///
+/// On success it inserts both [`AuthenticatedUser`] and [`AdminUser`] in the request extensions.
+/// Admin handlers should take an [`AdminUser`] argument: it fails closed (`403`) whenever this
+/// middleware did not grant the request, whatever the path looked like.
 pub struct AdminMiddleware;
 
 impl<S, B> Transform<S, ServiceRequest> for AdminMiddleware
@@ -62,11 +77,11 @@ where
             .cloned()
             .unwrap();
 
-        let path = req.path().to_string();
+        let is_admin_route = is_admin_request(&req);
         Box::pin(async move {
             let db_interface = app_state.get_smart_db();
 
-            if !ADMIN_PATH_REGEX.is_match(&path) {
+            if !is_admin_route {
                 let res = svc.call(req).await?;
                 return Ok(res.map_into_left_body());
             }
@@ -76,9 +91,13 @@ where
             })?;
 
             // Historical `JWT_SECRET` token or Keycloak access token, picked from the `alg` header.
-            let user_id = authenticate_token(&jwt, db_interface, app_state.get_keycloak())
-                .await
-                .map_err(actix_web::Error::from)?;
+            let user_id = Box::pin(authenticate_token(
+                &jwt,
+                db_interface,
+                app_state.get_keycloak(),
+            ))
+            .await
+            .map_err(actix_web::Error::from)?;
             let view = IsAdminQueryView::new(user_id);
 
             let is_admin = db_interface
@@ -87,8 +106,11 @@ where
                 .map_err(actix_web::Error::from)?;
 
             if is_admin {
-                req.extensions_mut()
-                    .insert(AuthenticatedUser { id: user_id });
+                {
+                    let mut extensions = req.extensions_mut();
+                    extensions.insert(AuthenticatedUser { id: user_id });
+                    extensions.insert(AdminUser { id: user_id });
+                }
                 let res = svc.call(req).await?;
                 Ok(res.map_into_left_body())
             } else {

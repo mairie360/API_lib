@@ -443,6 +443,105 @@ mod admin_path_tests {
     }
 }
 
+/// MAIR-391: the admin check must see the path the router routes on, percent-decoded, like the
+/// APIs that wrap `AdminMiddleware` on a whole `/api/v1` scope (`Core_API`).
+#[cfg(test)]
+mod admin_encoded_paths {
+    use super::*;
+    use actix_web::{http::StatusCode, test, web, App, HttpResponse};
+    use mairie360_api_lib::jwt_manager::generate_jwt;
+    use mairie360_api_lib::security::{AdminMiddleware, AdminUser};
+    use mairie360_api_lib::test_setup::queries_setup::{ADMIN_ID, GROUP_OWNER_ID};
+
+    async fn admin_handler(admin: AdminUser) -> HttpResponse {
+        HttpResponse::Ok().body(admin.id.to_string())
+    }
+
+    async fn open_handler() -> HttpResponse {
+        HttpResponse::Ok().body("open")
+    }
+
+    /// Status of a GET on `$uri` with a historical token of user `$user_id`.
+    macro_rules! status_of {
+        ($app:expr, $uri:expr, $user_id:expr) => {{
+            let token = generate_jwt(&$user_id.to_string(), "role").unwrap();
+            let req = test::TestRequest::get()
+                .uri($uri)
+                .insert_header(("Authorization", format!("Bearer {token}")))
+                .to_request();
+            match test::try_call_service(&$app, req).await {
+                Ok(res) => res.status(),
+                Err(err) => err.as_response_error().status_code(),
+            }
+        }};
+    }
+
+    #[actix_web::test]
+    async fn test_percent_encoded_admin_paths_are_still_admin_paths() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
+        let user_id = *GROUP_OWNER_ID.get().unwrap();
+        let admin_id = *ADMIN_ID.get().unwrap();
+
+        let app = test::init_service(
+            App::new().app_data(app_state.clone()).service(
+                web::scope("/api/v1")
+                    .wrap(AdminMiddleware)
+                    .route("/admin/users", web::get().to(admin_handler))
+                    .route("/projects", web::get().to(open_handler)),
+            ),
+        )
+        .await;
+
+        for uri in [
+            "/api/v1/admin/users",
+            "/api/v1/%61dmin/users",
+            "/api/v1/%61%64%6d%69%6e/users",
+            "/api/v1/adm%69n/users",
+            "/api/%76%31/admin/users",
+        ] {
+            assert_eq!(
+                status_of!(app, uri, user_id),
+                StatusCode::FORBIDDEN,
+                "{uri} must be refused to a non-admin"
+            );
+            assert_eq!(
+                status_of!(app, uri, admin_id),
+                StatusCode::OK,
+                "{uri} must be granted to an admin"
+            );
+        }
+        assert_eq!(
+            status_of!(app, "/api/v1/projects", user_id),
+            StatusCode::OK,
+            "non-admin routes are not checked"
+        );
+    }
+
+    #[actix_web::test]
+    async fn test_admin_user_extractor_fails_closed_outside_the_admin_check() {
+        setup();
+        let (_container, url) = get_shared_db().await;
+        let app_state = web::Data::new(AppState::new(String::new(), url.clone()).await);
+        let admin_id = *ADMIN_ID.get().unwrap();
+
+        // An admin handler mounted outside any admin path by mistake.
+        let app = test::init_service(
+            App::new()
+                .app_data(app_state.clone())
+                .wrap(AdminMiddleware)
+                .route("/api/v1/users/purge", web::get().to(admin_handler)),
+        )
+        .await;
+
+        assert_eq!(
+            status_of!(app, "/api/v1/users/purge", admin_id),
+            StatusCode::FORBIDDEN
+        );
+    }
+}
+
 /// Keycloak access tokens go through the same middlewares as the historical JWTs: the token is
 /// verified against the realm keys (fake realm from `test_setup::keycloak_setup`) and the
 /// verified e-mail is matched to an account.

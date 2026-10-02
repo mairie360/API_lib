@@ -1,2 +1,2 @@
 mod smart_database;
-pub use smart_database::SmartDatabase;
+pub use smart_database::{SmartDatabase, SmartTransaction};

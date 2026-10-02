@@ -2,8 +2,8 @@ use super::{KeycloakConfig, KeycloakError, KeycloakIdentity};
 use jsonwebtoken::jwk::JwkSet;
 use jsonwebtoken::{decode, decode_header, errors::ErrorKind, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
-use std::time::Duration;
-use tokio::sync::RwLock;
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, RwLock};
 
 /// Asymmetric algorithms accepted for Keycloak tokens. HMAC is refused so that a token can
 /// never be verified with a secret published in the realm's key set, and so that the historical
@@ -25,6 +25,13 @@ const CLOCK_SKEW_LEEWAY: u64 = 30;
 
 /// Timeout of every HTTP call to Keycloak.
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Minimum delay between two downloads of the realm key set.
+///
+/// A token announcing an unknown `kid` triggers a download, so without this delay anybody could
+/// make the API hammer Keycloak with forged tokens (MAIR-391). A genuine key rotation is still
+/// picked up after at most this delay.
+pub const DEFAULT_JWKS_REFRESH_INTERVAL: Duration = Duration::from_secs(10);
 
 /// `typ` claim Keycloak writes into access tokens; ID tokens carry `ID` and refresh tokens
 /// `Refresh`, neither of which grants access to an API.
@@ -66,14 +73,20 @@ struct AccessTokenClaims {
     realm_access: Option<RealmAccess>,
 }
 
-/// Verifies Keycloak access tokens against the realm's published keys, which are cached and
-/// fetched again once when a token announces an unknown key (key rotation).
+/// Verifies Keycloak access tokens against the realm's published keys.
 ///
-/// Held by `AppState` and shared by every request: the key cache is behind an async lock.
+/// The keys are cached and fetched again when a token announces an unknown key (key rotation),
+/// at most once per refresh interval ([`DEFAULT_JWKS_REFRESH_INTERVAL`]).
+///
+/// Held by `AppState` and shared by every request: the key cache is behind an async lock, and
+/// downloads are serialised so that concurrent requests with an unknown `kid` share one fetch.
 pub struct KeycloakTokenVerifier {
     config: KeycloakConfig,
     http: reqwest::Client,
     jwks: RwLock<Option<JwkSet>>,
+    /// When the key set was last downloaded (successfully or not); also the download lock.
+    last_fetch: Mutex<Option<Instant>>,
+    refresh_interval: Duration,
 }
 
 impl KeycloakTokenVerifier {
@@ -91,7 +104,16 @@ impl KeycloakTokenVerifier {
             config,
             http,
             jwks: RwLock::new(None),
+            last_fetch: Mutex::new(None),
+            refresh_interval: DEFAULT_JWKS_REFRESH_INTERVAL,
         }
+    }
+
+    /// Overrides the minimum delay between two downloads of the key set (tests).
+    #[must_use]
+    pub const fn with_refresh_interval(mut self, refresh_interval: Duration) -> Self {
+        self.refresh_interval = refresh_interval;
+        self
     }
 
     #[must_use]
@@ -189,15 +211,32 @@ impl KeycloakTokenVerifier {
         })
     }
 
-    /// Returns the realm key `kid`, fetching the key set again once if it is unknown (Keycloak
-    /// rotated its keys since the last fetch).
+    /// Returns the realm key `kid`, fetching the key set again if it is unknown (Keycloak rotated
+    /// its keys since the last fetch), unless it was already fetched less than
+    /// `refresh_interval` ago: the token is then refused without calling Keycloak.
     async fn decoding_key(&self, kid: &str) -> Result<DecodingKey, KeycloakError> {
         if let Some(key) = self.cached_key(kid).await {
             return key;
         }
+
+        let mut last_fetch = self.last_fetch.lock().await;
+        // Another request may have downloaded the key set while this one waited for the lock.
+        if let Some(key) = self.cached_key(kid).await {
+            return key;
+        }
+        if last_fetch.is_some_and(|at| at.elapsed() < self.refresh_interval) {
+            eprintln!("Keycloak token rejected: unknown key `{kid}` (key set fetched recently).");
+            return Err(if self.jwks.read().await.is_some() {
+                KeycloakError::InvalidToken
+            } else {
+                KeycloakError::Unavailable
+            });
+        }
+        *last_fetch = Some(Instant::now());
         let jwks = self.fetch_jwks().await?;
         let key = jwks.find(kid).map(DecodingKey::from_jwk);
         *self.jwks.write().await = Some(jwks);
+        drop(last_fetch);
         key.map_or_else(
             || {
                 eprintln!("Keycloak token rejected: unknown key `{kid}`.");

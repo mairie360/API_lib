@@ -13,5 +13,8 @@ pub use is_session_token_valid::IsSessionTokenValidQueryView;
 mod has_access;
 pub use has_access::HasAccessQueryView;
 
+mod is_user_active_by_id;
+pub use is_user_active_by_id::IsUserActiveByIdQueryView;
+
 mod is_admin;
 pub use is_admin::IsAdminQueryView;

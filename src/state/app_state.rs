@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use super::readiness::{within_timeout, Readiness};
 use crate::{
-    database::db_interface::Database,
-    env_manager::get_env_var,
+    database::{build_pg_url, db_interface::Database},
+    env_manager::{get_critical_env_var, get_env_var},
     jwt_manager::enforce_jwt_config,
     keycloak::{KeycloakConfig, KeycloakTokenVerifier},
     redis::redis_interface::Redis,
@@ -39,6 +39,26 @@ impl AppState {
     /// Same as [`AppState::with_keycloak`].
     pub async fn new(redis_url: String, pg_url: String) -> Self {
         Self::with_keycloak(redis_url, pg_url, KeycloakConfig::from_env()).await
+    }
+
+    /// [`AppState::new`] with the URLs read from the environment (MAIR-427), the block every
+    /// API's `main.rs` used to copy: `REDIS_URL`, and `DB_USER`, `DB_PASSWORD`, `DB_HOST`,
+    /// `DB_PORT`, `DB_NAME` assembled by [`build_pg_url`].
+    ///
+    /// # Panics
+    ///
+    /// When one of these variables is unset (see [`get_critical_env_var`]), and in the cases of
+    /// [`AppState::with_keycloak`].
+    pub async fn from_env() -> Self {
+        let redis_url = get_critical_env_var("REDIS_URL");
+        let pg_url = build_pg_url(
+            &get_critical_env_var("DB_USER"),
+            &get_critical_env_var("DB_PASSWORD"),
+            &get_critical_env_var("DB_HOST"),
+            &get_critical_env_var("DB_PORT"),
+            &get_critical_env_var("DB_NAME"),
+        );
+        Self::new(redis_url, pg_url).await
     }
 
     /// Same as [`AppState::new`] with an explicit Keycloak configuration (`None` disables

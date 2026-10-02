@@ -1,5 +1,7 @@
 pub mod db_interface;
 pub mod error;
+mod pg_url;
+pub use pg_url::build_pg_url;
 pub mod queries_result_views;
 pub mod query_views;
 mod sql_id;

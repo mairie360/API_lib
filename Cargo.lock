@@ -2294,6 +2294,7 @@ dependencies = [
  "jsonwebtoken",
  "libc",
  "mairie360_api_lib",
+ "percent-encoding",
  "postgres",
  "redis",
  "regex",
@@ -2310,6 +2311,7 @@ dependencies = [
  "tokio-postgres",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 

@@ -4,6 +4,7 @@ use sqlx::postgres::PgArguments;
 use sqlx::{Arguments, PgPool};
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -175,6 +176,9 @@ fn build_arguments(params: &[QueryParam]) -> Result<PgArguments, DbError> {
     Ok(args)
 }
 
+/// Delay between two connection attempts of [`Database::connect_with_retry`].
+const CONNECT_RETRY_DELAY: Duration = Duration::from_secs(1);
+
 #[derive(Clone)]
 pub struct Database {
     inner: Arc<DatabaseInner>,
@@ -203,6 +207,52 @@ impl Database {
 
     pub async fn is_connected(&self) -> bool {
         self.inner.pool.lock().await.is_some()
+    }
+
+    /// Connects to Postgres, retrying every second until `timeout` has elapsed (MAIR-423): the
+    /// database may start after the API (compose stack, rollout), but an API that never reaches
+    /// it must not start and look healthy.
+    ///
+    /// # Errors
+    ///
+    /// Returns the last connection error once `timeout` has elapsed without a connection.
+    pub async fn connect_with_retry(
+        database_url: &str,
+        timeout: Duration,
+    ) -> Result<Self, DbError> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let attempt = tokio::time::timeout(remaining, PgPool::connect(database_url)).await;
+            let error = match attempt {
+                Ok(Ok(pool)) => {
+                    return Ok(Self {
+                        inner: Arc::new(DatabaseInner {
+                            database_url: database_url.to_string(),
+                            pool: Mutex::new(Some(pool)),
+                        }),
+                    })
+                }
+                Ok(Err(e)) => DbError::from(e),
+                Err(_) => DbError::Sqlx(sqlx::Error::PoolTimedOut),
+            };
+            if Instant::now() + CONNECT_RETRY_DELAY >= deadline {
+                return Err(error);
+            }
+            tracing::warn!(error = %error, "Postgres unreachable, retrying");
+            tokio::time::sleep(CONNECT_RETRY_DELAY).await;
+        }
+    }
+
+    /// Runs `SELECT 1`: the cheapest round-trip proving Postgres accepts queries (readiness).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`DbError`] when no connection can be obtained or the query fails.
+    pub async fn ping(&self) -> Result<(), DbError> {
+        let pool = self.get_pool().await?;
+        sqlx::query("SELECT 1").execute(&pool).await?;
+        Ok(())
     }
 
     async fn get_pool(&self) -> Result<PgPool, DbError> {

@@ -1,10 +1,27 @@
+use std::time::Duration;
+
+use super::readiness::{within_timeout, Readiness};
 use crate::{
     database::db_interface::Database,
+    env_manager::get_env_var,
     jwt_manager::enforce_jwt_config,
     keycloak::{KeycloakConfig, KeycloakTokenVerifier},
     redis::redis_interface::Redis,
     smart_db::SmartDatabase,
 };
+
+/// Seconds the API waits for Postgres at startup before giving up (MAIR-423).
+pub const DB_CONNECT_TIMEOUT_ENV: &str = "DB_CONNECT_TIMEOUT";
+
+/// [`DB_CONNECT_TIMEOUT_ENV`] when unset or not a positive integer.
+pub const DEFAULT_DB_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+fn db_connect_timeout() -> Duration {
+    get_env_var(DB_CONNECT_TIMEOUT_ENV)
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|seconds| *seconds > 0)
+        .map_or(DEFAULT_DB_CONNECT_TIMEOUT, Duration::from_secs)
+}
 
 pub struct AppState {
     smart_db: SmartDatabase,
@@ -29,8 +46,11 @@ impl AppState {
     ///
     /// # Panics
     ///
-    /// Panics when `JWT_SECRET` / `JWT_TIMEOUT` are missing or weak, see
-    /// [`enforce_jwt_config`] (only logged in builds with the `test-utils` feature).
+    /// - when `JWT_SECRET` / `JWT_TIMEOUT` are missing or weak, see [`enforce_jwt_config`]
+    ///   (only logged in builds with the `test-utils` feature);
+    /// - when Postgres cannot be reached within [`DB_CONNECT_TIMEOUT_ENV`] seconds (default
+    ///   30): an API without its database must crash (and be restarted by Kubernetes), not start
+    ///   and answer `500` to every request. Redis stays optional (the cache is skipped).
     pub async fn with_keycloak(
         redis_url: String,
         pg_url: String,
@@ -42,8 +62,15 @@ impl AppState {
         // --- Redis ---
         let redis_interface = Redis::new(&redis_url);
 
-        // --- PostgreSQL ---
-        let db_interface = Database::new(&pg_url).await;
+        // --- PostgreSQL: required, the API refuses to start without it (MAIR-423) ---
+        let timeout = db_connect_timeout();
+        let db_interface = match Database::connect_with_retry(&pg_url, timeout).await {
+            Ok(db) => db,
+            Err(error) => {
+                tracing::error!(error = %error, "Postgres unreachable at startup");
+                panic!("Postgres unreachable after {}s: {error}", timeout.as_secs());
+            }
+        };
 
         tracing::info!(
             connected = redis_interface.is_connected().await,
@@ -70,6 +97,18 @@ impl AppState {
             redis: redis_interface,
             keycloak: keycloak.map(KeycloakTokenVerifier::new),
         }
+    }
+
+    /// Checks Postgres (`SELECT 1`) and Redis (one round-trip) concurrently, each bounded by
+    /// [`super::READINESS_CHECK_TIMEOUT`]. Serve [`Readiness::to_response`] on `GET /ready`.
+    pub async fn readiness(&self) -> Readiness {
+        let db = self.smart_db.get_db();
+        let (postgres, redis) = tokio::join!(
+            // Boxed: the two checks hold sqlx/deadpool futures of several kilobytes.
+            Box::pin(within_timeout(db.ping())),
+            Box::pin(within_timeout(self.redis.ping()))
+        );
+        Readiness { postgres, redis }
     }
 
     #[must_use]

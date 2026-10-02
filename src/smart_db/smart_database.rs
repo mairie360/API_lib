@@ -19,6 +19,12 @@ impl SmartDatabase {
         Self { db, redis }
     }
 
+    /// The Postgres client, without the cache (pings, transactions).
+    #[must_use]
+    pub const fn get_db(&self) -> &Database {
+        &self.db
+    }
+
     /// Renvoie le client Redis utilisé par le cache-aside. `Redis` encapsule un
     /// `Arc`, le clone renvoyé partage donc le même pool et le même état de
     /// connexion que celui interrogé par `fetch_*`/`execute`.

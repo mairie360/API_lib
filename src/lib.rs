@@ -5,6 +5,7 @@ pub mod error;
 pub mod jwt_manager;
 pub mod keycloak;
 pub mod logging;
+pub mod pagination;
 pub mod password;
 pub mod redis;
 pub mod security;

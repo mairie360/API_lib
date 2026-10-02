@@ -25,6 +25,7 @@ futures-util = "0.3"
 governor = "0.10"
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 libc = { version = "0.2", optional = true }
+percent-encoding = "2"
 redis = "1.0.3"
 regex = "1"
 reqwest = { version = "0.13.4", features = ["json"] }
@@ -45,6 +46,7 @@ mairie360_api_lib = { path = ".", features = ["test-utils"] }
 serial_test = "4.0.0"
 temp-env = "0.3.6"
 postgres = "0.19"
+url = "2"
 
 [features]
 default = []

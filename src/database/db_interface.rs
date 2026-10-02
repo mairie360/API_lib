@@ -111,10 +111,11 @@ impl QueryParam {
     }
 }
 
-/// Convertit un identifiant d'API (`u64`) en identifiant SQL `INT4`.
+/// Converts an API id (`u64`) to an `INT4` SQL id.
 ///
-/// Les valeurs au-delà de `i32::MAX` saturent au lieu de boucler : un `as i32` transformerait
-/// par exemple `2^32 + 1` en `1`, c'est-à-dire en l'identifiant d'une autre ligne.
+/// Values above `i32::MAX` saturate instead of wrapping: `as i32` would turn `2^32 + 1` into
+/// `1`, the id of another row. For ids coming from a request, prefer [`super::SqlId`] (refused
+/// before the handler) or [`super::try_id_to_sql`] (an error instead of `i32::MAX`).
 #[must_use]
 pub fn id_to_sql(id: u64) -> i32 {
     i32::try_from(id).unwrap_or(i32::MAX)

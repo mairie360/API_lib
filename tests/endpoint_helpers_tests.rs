@@ -123,3 +123,16 @@ async fn another_user_cannot_reach_someone_elses_resource() {
         "another user"
     );
 }
+
+#[actix_web::test]
+async fn an_id_postgres_cannot_hold_is_not_an_alias_of_another_row() {
+    let app = api!();
+    let alice = SeededUser::Alice.id().await;
+    // 2^32 + alice used to be truncated to alice by `as i32` (MAIR-422).
+    let uri = format!("/api/v1/users/{}/data", (1_u64 << 32) + alice);
+    let req = test::TestRequest::get()
+        .uri(&uri)
+        .insert_header(authorization(alice))
+        .to_request();
+    assert_eq!(status_of(&app, req).await, StatusCode::NOT_FOUND);
+}

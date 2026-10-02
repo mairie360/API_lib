@@ -87,7 +87,7 @@ impl KeycloakConfig {
             }
             (None, None) => None,
             _ => {
-                eprintln!(
+                tracing::warn!(
                     "Keycloak tokens disabled: KEYCLOAK_REALM_URL and KEYCLOAK_CLIENT_ID must both be set."
                 );
                 None

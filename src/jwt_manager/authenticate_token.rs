@@ -38,12 +38,12 @@ pub async fn authenticate_token(
     keycloak: Option<&KeycloakTokenVerifier>,
 ) -> Result<u64, JWTCheckError> {
     if jwt.is_empty() {
-        eprintln!("No JWT token provided.");
+        tracing::debug!("No JWT token provided.");
         return Err(JWTCheckError::NoTokenProvided);
     }
 
     let header = decode_header(jwt).map_err(|err| {
-        eprintln!("JWT header decode error: {err:?}");
+        tracing::warn!(error = ?err, "JWT header decode error");
         JWTCheckError::InvalidToken
     })?;
     if header.alg.family() == AlgorithmFamily::Hmac {
@@ -51,7 +51,7 @@ pub async fn authenticate_token(
     }
 
     let verifier = keycloak.ok_or_else(|| {
-        eprintln!("Keycloak token received but Keycloak is not configured on this API.");
+        tracing::warn!("Keycloak token received but Keycloak is not configured on this API.");
         JWTCheckError::InvalidToken
     })?;
     let identity = verifier.verify(jwt).await?;
@@ -60,14 +60,15 @@ pub async fn authenticate_token(
     match db_interface.fetch_scalar::<i32, _>(&query_view).await {
         Ok(user_id) => Ok(id_from_sql(user_id)),
         Err(ApiLibError::Database(DbError::NotFound)) => {
-            eprintln!(
+            tracing::info!(
                 "No single active account matches the Keycloak identity {} ({}).",
-                identity.subject, identity.email
+                identity.subject,
+                identity.email
             );
             Err(JWTCheckError::UnknownUser)
         }
         Err(e) => {
-            eprintln!("Database query error: {e}");
+            tracing::error!(error = %e, "Database query error");
             Err(JWTCheckError::DatabaseError)
         }
     }

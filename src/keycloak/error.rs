@@ -35,12 +35,10 @@ impl ResponseError for KeycloakError {
             // realm configuration matter: neither deserves an error log.
             Self::ExpiredToken | Self::EmailNotVerified => {}
             Self::InvalidToken => {
-                eprintln!(
-                    "[SECURITY WARNING] Access attempted with a forged or invalid Keycloak token."
-                );
+                tracing::warn!("Access attempted with a forged or invalid Keycloak token.");
             }
             Self::Unavailable => {
-                eprintln!("[CRITICAL KEYCLOAK ERROR] The realm key set could not be fetched.");
+                tracing::error!("The Keycloak realm key set could not be fetched.");
             }
         }
         HttpResponse::build(self.status_code()).body(self.to_string())

@@ -3,22 +3,22 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DbError {
-    #[error("Erreur interne : {0}")]
+    #[error("Internal error: {0}")]
     Internal(String),
 
-    #[error("Erreur de correspondance du DTO : {0}")]
+    #[error("Row does not match the DTO: {0}")]
     MappingError(String),
 
-    #[error("Violation de contrainte d'unicité (doublon) : {0}")]
+    #[error("Unique constraint violation: {0}")]
     UniqueViolation(String),
 
-    #[error("Violation de clé étrangère : {0}")]
+    #[error("Foreign key violation: {0}")]
     ForeignKeyViolation(String),
 
-    #[error("Ressource non trouvée")]
+    #[error("Resource not found")]
     NotFound,
 
-    #[error("Erreur de base de données : {0}")]
+    #[error("Database error: {0}")]
     Sqlx(sqlx::Error),
 }
 
@@ -41,6 +41,31 @@ impl From<sqlx::Error> for DbError {
     }
 }
 
+impl DbError {
+    /// Logs the error at its severity: nothing for `NotFound` (a normal client outcome), a
+    /// warning for constraint violations, an error for everything that ends in a `500`.
+    pub fn log(&self) {
+        match self {
+            Self::NotFound => {}
+            Self::UniqueViolation(msg) => {
+                tracing::warn!(error = %msg, "Unique constraint violation");
+            }
+            Self::ForeignKeyViolation(msg) => {
+                tracing::warn!(error = %msg, "Foreign key violation");
+            }
+            Self::MappingError(msg) => {
+                tracing::error!(error = %msg, "Database row does not match the DTO");
+            }
+            Self::Internal(msg) => {
+                tracing::error!(error = %msg, "Database internal error");
+            }
+            Self::Sqlx(err) => {
+                tracing::error!(error = ?err, "Database driver error");
+            }
+        }
+    }
+}
+
 impl ResponseError for DbError {
     fn status_code(&self) -> StatusCode {
         match self {
@@ -54,31 +79,7 @@ impl ResponseError for DbError {
     }
 
     fn error_response(&self) -> HttpResponse {
-        // --- LOGS AUTOMATIQUES SELON LA CRITICITÉ ---
-        match self {
-            // Cas bénins / erreurs utilisateurs : simple trace informative (ou rien du tout)
-            Self::NotFound => {
-                // Pas besoin de logger en erreur, c'est un comportement utilisateur classique
-            }
-            Self::UniqueViolation(msg) => {
-                // Optionnel : un avertissement pour savoir qu'un doublon a été tenté
-                eprintln!("[AVERTISSEMENT DB] Tentative de doublon : {msg}");
-            }
-            Self::ForeignKeyViolation(msg) => {
-                eprintln!("[AVERTISSEMENT DB] Référence invalide : {msg}");
-            }
-
-            // Vrais problèmes techniques (Erreurs 500) : Log critique indispensable
-            Self::MappingError(msg) => {
-                eprintln!("[ERREUR CRITIQUE DB] Échec du mapping JSON vers DTO : {msg}");
-            }
-            Self::Internal(msg) => {
-                eprintln!("[ERREUR CRITIQUE DB] Erreur interne : {msg}");
-            }
-            Self::Sqlx(err) => {
-                eprintln!("[ERREUR CRITIQUE DB] Erreur de pilote SQLx : {err:?}");
-            }
-        }
+        self.log();
 
         // --- HTTP response: generic bodies only. Postgres messages name tables, columns and
         // constraints, and are logged above instead of being sent to the client (MAIR-391). ---

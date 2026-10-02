@@ -53,6 +53,49 @@ impl SmartDatabase {
         })
     }
 
+    /// Runs `work` in a transaction: committed when it returns `Ok`, rolled back when it returns
+    /// `Err` (MAIR-420). Prefer it to [`Self::begin`], which leaves the `commit()` to the caller.
+    ///
+    /// The closure gets the [`SmartTransaction`] to run its queries on; its error type only has
+    /// to accept an [`ApiLibError`], so an API can use its own endpoint error enum.
+    ///
+    /// ```ignore
+    /// let chat_id = state
+    ///     .get_smart_db()
+    ///     .transaction(async |tx| {
+    ///         let chat: ChatId = tx.fetch_one(&CreateChatView::new(&name)).await?;
+    ///         for member in &members {
+    ///             tx.execute(&AddChatMemberView::new(chat.id, *member)).await?;
+    ///         }
+    ///         Ok::<_, ApiLibError>(chat.id)
+    ///     })
+    ///     .await?;
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns the error of `work` (after the rollback), or an [`ApiLibError`] converted into `E`
+    /// when `BEGIN` or `COMMIT` fails; in every error case nothing is applied.
+    pub async fn transaction<R, E, F>(&self, work: F) -> Result<R, E>
+    where
+        F: AsyncFnOnce(&mut SmartTransaction) -> Result<R, E>,
+        E: From<ApiLibError>,
+    {
+        let mut tx = self.begin().await?;
+        match work(&mut tx).await {
+            Ok(value) => {
+                tx.commit().await?;
+                Ok(value)
+            }
+            Err(error) => {
+                // A failed ROLLBACK leaves nothing applied either: Postgres aborts the
+                // transaction when the connection goes back to the pool.
+                let _ = tx.rollback().await;
+                Err(error)
+            }
+        }
+    }
+
     /// # Errors
     ///
     /// Renvoie une [`ApiLibError`] si la requête en base échoue. Les erreurs Redis sont

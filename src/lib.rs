@@ -14,3 +14,4 @@ pub mod state;
 /// Test helpers (containers, seeded fixtures, Keycloak mock), behind the `test-utils` feature.
 #[cfg(feature = "test-utils")]
 pub mod test_setup;
+pub mod validation;

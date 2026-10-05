@@ -46,7 +46,7 @@ fn components_round_trip_through_url_parsing() {
 #[test]
 fn base64_password_with_slash_round_trips() {
     // Shape of the generated secrets that broke the first dry-run deployment.
-    let password = "q8Zr/Xk+2Lw9/aB3dE==";
+    let password = "not/a+real/secret==";
     let url = build_pg_url("postgres", password, "db", "5432", "postgres");
     let parsed = Url::parse(&url).expect("the URL must be valid");
 

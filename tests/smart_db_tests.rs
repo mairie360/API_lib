@@ -1,4 +1,5 @@
 use mairie360_api_lib::database::db_interface::{ApiRequestDto, Database, QueryParam};
+use mairie360_api_lib::error::ApiLibError;
 use mairie360_api_lib::redis::redis_interface::Redis;
 use mairie360_api_lib::smart_db::SmartDatabase;
 use mairie360_api_lib::test_setup::{
@@ -350,5 +351,98 @@ mod transaction_tests {
             redis.key_exist(CACHE_KEY).await.unwrap(),
             "nothing was written, nothing is invalidated"
         );
+    }
+
+    /// Error type of an API endpoint: `transaction` only needs it to accept an `ApiLibError`.
+    #[derive(Debug, PartialEq, Eq)]
+    enum EndpointError {
+        Database,
+        Refused,
+    }
+
+    impl From<ApiLibError> for EndpointError {
+        fn from(_: ApiLibError) -> Self {
+            Self::Database
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_transaction_helper_commits_on_ok() {
+        let (_redis_node, redis_config) = start_redis_container().await;
+        let (smart_db, redis) = smart_db(&redis_config.url).await;
+        redis.set(CACHE_KEY, "stale").await.unwrap();
+
+        let seen_inside = smart_db
+            .transaction(async |tx| {
+                tx.execute(&InsertLabel::new("helper-ok")).await?;
+                tx.execute(&InsertLabel::new("helper-ok")).await?;
+                tx.fetch_scalar::<i64, _>(&CountLabel::new("helper-ok"))
+                    .await
+            })
+            .await
+            .unwrap();
+
+        let committed: i64 = smart_db
+            .fetch_scalar(&CountLabel::new("helper-ok"))
+            .await
+            .unwrap();
+        assert_eq!(seen_inside, 2, "the closure's value is returned");
+        assert_eq!(committed, 2);
+        assert!(
+            !redis.key_exist(CACHE_KEY).await.unwrap(),
+            "invalidated after the commit"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_transaction_helper_rolls_back_on_err() {
+        let (_redis_node, redis_config) = start_redis_container().await;
+        let (smart_db, redis) = smart_db(&redis_config.url).await;
+        redis.set(CACHE_KEY, "kept").await.unwrap();
+
+        // Refused by the endpoint's own logic after a first write.
+        let refused: Result<(), EndpointError> = smart_db
+            .transaction(async |tx| {
+                tx.execute(&InsertLabel::new("helper-refused")).await?;
+                Err(EndpointError::Refused)
+            })
+            .await;
+        // Failed in Postgres after a first write (NULL in a NOT NULL column).
+        let failed: Result<(), EndpointError> = smart_db
+            .transaction(async |tx| {
+                tx.execute(&InsertLabel::new("helper-failed")).await?;
+                tx.execute(&InsertNull).await?;
+                Ok(())
+            })
+            .await;
+
+        assert_eq!(
+            refused,
+            Err(EndpointError::Refused),
+            "the error is kept as is"
+        );
+        assert_eq!(failed, Err(EndpointError::Database));
+        for label in ["helper-refused", "helper-failed"] {
+            let count: i64 = smart_db
+                .fetch_scalar(&CountLabel::new(label))
+                .await
+                .unwrap();
+            assert_eq!(count, 0, "{label}");
+        }
+        assert!(redis.key_exist(CACHE_KEY).await.unwrap());
+    }
+
+    #[derive(Debug, Clone, Deserialize)]
+    struct InsertNull;
+
+    impl ApiRequestDto for InsertNull {
+        fn query_sql(&self) -> &'static str {
+            "INSERT INTO smart_tx_test (label) VALUES (NULL)"
+        }
+        fn query_params(&self) -> &[QueryParam] {
+            &[]
+        }
     }
 }

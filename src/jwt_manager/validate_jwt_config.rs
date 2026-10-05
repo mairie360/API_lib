@@ -102,11 +102,11 @@ pub fn enforce_jwt_config() {
         return;
     };
     if error.is_weak_secret() && is_enabled(ALLOW_WEAK_SECRET_ENV) {
-        eprintln!("[SECURITY WARNING] {error}; accepted because {ALLOW_WEAK_SECRET_ENV} is set.");
+        tracing::warn!("{error}; accepted because {ALLOW_WEAK_SECRET_ENV} is set.");
         return;
     }
     if cfg!(feature = "test-utils") {
-        eprintln!("[SECURITY WARNING] {error}; accepted because the `test-utils` feature is on.");
+        tracing::warn!("{error}; accepted because the `test-utils` feature is on.");
         return;
     }
     panic!(

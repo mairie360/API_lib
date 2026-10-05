@@ -137,19 +137,19 @@ impl KeycloakTokenVerifier {
     pub async fn verify(&self, token: &str) -> Result<KeycloakIdentity, KeycloakError> {
         let header = decode_header(token).map_err(|_| KeycloakError::InvalidToken)?;
         if !ACCEPTED_ALGORITHMS.contains(&header.alg) {
-            eprintln!(
+            tracing::warn!(
                 "Keycloak token rejected: algorithm {:?} is not accepted.",
                 header.alg
             );
             return Err(KeycloakError::InvalidToken);
         }
         let kid = header.kid.ok_or_else(|| {
-            eprintln!("Keycloak token rejected: no `kid` header.");
+            tracing::warn!("Keycloak token rejected: no `kid` header.");
             KeycloakError::InvalidToken
         })?;
         let key = self.decoding_key(&kid).await?;
         if header.alg.family() != key.family() {
-            eprintln!("Keycloak token rejected: algorithm does not match the key `{kid}`.");
+            tracing::warn!("Keycloak token rejected: algorithm does not match the key `{kid}`.");
             return Err(KeycloakError::InvalidToken);
         }
 
@@ -166,7 +166,7 @@ impl KeycloakTokenVerifier {
                 if matches!(e.kind(), ErrorKind::ExpiredSignature) {
                     KeycloakError::ExpiredToken
                 } else {
-                    eprintln!("Keycloak token rejected: {e}");
+                    tracing::warn!(error = %e, "Keycloak token rejected");
                     KeycloakError::InvalidToken
                 }
             })?
@@ -174,12 +174,12 @@ impl KeycloakTokenVerifier {
 
         if let Some(typ) = claims.typ.as_deref() {
             if typ != ACCESS_TOKEN_TYPE {
-                eprintln!("Keycloak token rejected: `{typ}` token used as an access token.");
+                tracing::warn!("Keycloak token rejected: `{typ}` token used as an access token.");
                 return Err(KeycloakError::InvalidToken);
             }
         }
         if !self.is_for_this_api(&claims) {
-            eprintln!(
+            tracing::warn!(
                 "Keycloak token rejected: issued for another audience (azp = {:?}).",
                 claims.azp
             );
@@ -225,7 +225,9 @@ impl KeycloakTokenVerifier {
             return key;
         }
         if last_fetch.is_some_and(|at| at.elapsed() < self.refresh_interval) {
-            eprintln!("Keycloak token rejected: unknown key `{kid}` (key set fetched recently).");
+            tracing::warn!(
+                "Keycloak token rejected: unknown key `{kid}` (key set fetched recently)."
+            );
             return Err(if self.jwks.read().await.is_some() {
                 KeycloakError::InvalidToken
             } else {
@@ -239,7 +241,7 @@ impl KeycloakTokenVerifier {
         drop(last_fetch);
         key.map_or_else(
             || {
-                eprintln!("Keycloak token rejected: unknown key `{kid}`.");
+                tracing::warn!("Keycloak token rejected: unknown key `{kid}`.");
                 Err(KeycloakError::InvalidToken)
             },
             |key| key.map_err(|_| KeycloakError::InvalidToken),
@@ -261,11 +263,11 @@ impl KeycloakTokenVerifier {
             .await
             .and_then(reqwest::Response::error_for_status)
             .map_err(|e| {
-                eprintln!("Keycloak key set unreachable: {e}");
+                tracing::error!(error = %e, "Keycloak key set unreachable");
                 KeycloakError::Unavailable
             })?;
         response.json().await.map_err(|e| {
-            eprintln!("Unreadable Keycloak key set: {e}");
+            tracing::error!(error = %e, "Unreadable Keycloak key set");
             KeycloakError::Unavailable
         })
     }

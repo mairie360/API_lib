@@ -20,7 +20,7 @@ impl ResponseError for EmailError {
         match self {
             Self::Resend(err) => {
                 // Log critique indispensable pour tracer les pannes du service tiers
-                eprintln!("[ERREUR CRITIQUE EMAIL] Échec du service Resend : {err:?}");
+                tracing::error!(error = ?err, "Resend e-mail service failure");
             }
         }
 

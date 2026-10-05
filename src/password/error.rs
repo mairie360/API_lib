@@ -15,7 +15,7 @@ impl ResponseError for PasswordError {
     }
 
     fn error_response(&self) -> HttpResponse {
-        eprintln!("[ERREUR CRITIQUE MOT DE PASSE] {self}");
+        tracing::error!("Password hashing failure: {self}");
         HttpResponse::InternalServerError().body(self.to_string())
     }
 }

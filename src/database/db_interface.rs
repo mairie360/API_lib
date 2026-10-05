@@ -192,7 +192,7 @@ impl Database {
                 pool: match PgPool::connect(database_url).await {
                     Ok(pool) => Mutex::new(Some(pool)),
                     Err(e) => {
-                        eprintln!("Failed to connect to database: {e}");
+                        tracing::error!(error = %e, "Failed to connect to the database");
                         Mutex::new(None)
                     }
                 },

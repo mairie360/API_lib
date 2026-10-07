@@ -43,6 +43,7 @@ impl ApiRequestDto for GetUserIdByEmailQueryView {
 
 impl Display for GetUserIdByEmailQueryView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "GetUserIdByEmailQueryView: email = {}", self.get_email())
+        // Never the e-mail itself (MAIR-290): a view is described, not its data.
+        write!(f, "GetUserIdByEmailQueryView")
     }
 }

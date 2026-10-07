@@ -1,4 +1,8 @@
+use std::fmt;
+use std::sync::LazyLock;
+
 use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use regex::Regex;
 use thiserror::Error;
 
 use crate::{
@@ -6,7 +10,9 @@ use crate::{
     password::error::PasswordError, redis::error::RedisError,
 };
 
-#[derive(Debug, Error)]
+/// Every error of the crate. Like its variants, its `Display` and `Debug` never contain a value
+/// received or read (MAIR-290): log it with `%` or `?` freely.
+#[derive(Error)]
 pub enum ApiLibError {
     #[error(transparent)]
     Database(#[from] DbError),
@@ -26,8 +32,52 @@ pub enum ApiLibError {
     #[error(transparent)]
     Email(#[from] resend_rs::Error),
 
-    #[error("JSON serialization error: {0}")]
+    #[error("JSON serialization error: {}", describe_json_error(.0))]
     Serialization(#[from] serde_json::Error),
+}
+
+impl fmt::Debug for ApiLibError {
+    // Same text as `Display`: a derived `Debug` would print the inner `serde_json::Error`, whose
+    // message quotes the offending value.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Database(e) => write!(f, "ApiLibError::Database({e:?})"),
+            Self::Redis(e) => write!(f, "ApiLibError::Redis({e:?})"),
+            Self::Jwt(e) => write!(f, "ApiLibError::Jwt({e:?})"),
+            Self::Keycloak(e) => write!(f, "ApiLibError::Keycloak({e:?})"),
+            Self::Password(e) => write!(f, "ApiLibError::Password({e:?})"),
+            Self::Email(e) => write!(f, "ApiLibError::Email({e})"),
+            Self::Serialization(_) => write!(f, "ApiLibError::Serialization({self})"),
+        }
+    }
+}
+
+/// The values serde quotes in its messages: a string, a number, a boolean, an unknown variant.
+static JSON_ERROR_VALUE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?x)
+        (?P<kind>string|integer|floating\ point|boolean|character|byte\ array|unsigned\ integer)
+        \ (?:"(?:[^"\\]|\\.)*"|`[^`]*`)
+        | (?P<variant>unknown\ variant)\ `[^`]*`
+        "#,
+    )
+    .expect("valid regex")
+});
+
+/// A `serde_json` error message without the values it quotes (MAIR-290).
+///
+/// `invalid type: string "alice@example.com", expected i32 at line 1 column 25` becomes
+/// `invalid type: string, expected i32 at line 1 column 25`. Field names (as in `missing field
+/// email`) are kept: they belong to the DTO, not to the data.
+#[must_use]
+pub fn describe_json_error(error: &serde_json::Error) -> String {
+    JSON_ERROR_VALUE
+        .replace_all(&error.to_string(), |caps: &regex::Captures<'_>| {
+            caps.name("kind")
+                .or_else(|| caps.name("variant"))
+                .map_or_else(String::new, |m| m.as_str().to_string())
+        })
+        .into_owned()
 }
 
 /// What an [`ApiLibError`] means for the caller, so an API can map it to its own error enum by

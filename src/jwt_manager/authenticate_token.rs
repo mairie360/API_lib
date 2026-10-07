@@ -60,10 +60,11 @@ pub async fn authenticate_token(
     match db_interface.fetch_scalar::<i32, _>(&query_view).await {
         Ok(user_id) => Ok(id_from_sql(user_id)),
         Err(ApiLibError::Database(DbError::NotFound)) => {
+            // The Keycloak subject identifies the identity; the e-mail is personal data and stays
+            // out of the logs (MAIR-290).
             tracing::info!(
-                "No single active account matches the Keycloak identity {} ({}).",
-                identity.subject,
-                identity.email
+                subject = %identity.subject,
+                "No single active account matches the Keycloak identity."
             );
             Err(JWTCheckError::UnknownUser)
         }

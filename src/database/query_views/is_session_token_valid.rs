@@ -8,7 +8,7 @@ use std::net::IpAddr;
 /// dont l'IP change (mobile passant du Wi-Fi à la 4G, VPN) doit garder sa session. Le token
 /// (aléatoire et unique) suffit à identifier la session. L'IP reste acceptée par [`Self::new`]
 /// et exposée par [`Self::get_ip_address`] pour ne pas casser les appelants existants.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct IsSessionTokenValidQueryView {
     ip_address: IpAddr,
     params: Vec<QueryParam>,
@@ -56,12 +56,20 @@ impl ApiRequestDto for IsSessionTokenValidQueryView {
 
 impl Display for IsSessionTokenValidQueryView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Never the token nor the address (MAIR-290): the user id is enough to trace it.
         write!(
             f,
-            "IsSessionTokenValidQueryView: user_id = {}, session_token = {}, ip_address = {}",
-            self.get_user_id(),
-            self.get_session_token(),
-            self.get_ip_address()
+            "IsSessionTokenValidQueryView: user_id = {}",
+            self.get_user_id()
         )
+    }
+}
+
+impl std::fmt::Debug for IsSessionTokenValidQueryView {
+    // Without the address (MAIR-290); the token is hidden by `QueryParam`'s own `Debug`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IsSessionTokenValidQueryView")
+            .field("params", &self.params)
+            .finish_non_exhaustive()
     }
 }

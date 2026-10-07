@@ -10,7 +10,12 @@ use uuid::Uuid;
 
 use crate::database::error::DbError;
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+/// A bound parameter, whose `Debug` hides the text and IP values (MAIR-290).
+///
+/// Every view that derives `Debug` holds its parameters, and a view logged with `?` must not
+/// print the e-mail, name, token or address it was built with. Ids, numbers, booleans and dates
+/// stay readable.
+#[derive(Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum QueryParam {
     I32(i32),
     I64(i64),
@@ -20,6 +25,21 @@ pub enum QueryParam {
     DateTime(DateTime<Utc>),
     IpAddr(IpAddr),
     OptionI32(Option<i32>),
+}
+
+impl std::fmt::Debug for QueryParam {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::I32(v) => f.debug_tuple("I32").field(v).finish(),
+            Self::I64(v) => f.debug_tuple("I64").field(v).finish(),
+            Self::Bool(v) => f.debug_tuple("Bool").field(v).finish(),
+            Self::Text(v) => write!(f, "Text(<{} chars>)", v.chars().count()),
+            Self::Uuid(v) => f.debug_tuple("Uuid").field(v).finish(),
+            Self::DateTime(v) => f.debug_tuple("DateTime").field(v).finish(),
+            Self::IpAddr(_) => write!(f, "IpAddr(<hidden>)"),
+            Self::OptionI32(v) => f.debug_tuple("OptionI32").field(v).finish(),
+        }
+    }
 }
 
 impl QueryParam {
@@ -434,7 +454,8 @@ where
             .fetch_one(executor)
             .await?;
     // Serde transforme le JSON directement dans le DTO de l'API
-    serde_json::from_value(json_val).map_err(|e| DbError::MappingError(e.to_string()))
+    serde_json::from_value(json_val)
+        .map_err(|e| DbError::MappingError(crate::error::describe_json_error(&e)))
 }
 
 async fn fetch_all_on<'e, E, T, Q>(executor: E, query: &Q) -> Result<Vec<T>, DbError>
@@ -452,7 +473,8 @@ where
     json_values
         .into_iter()
         .map(|json_val| {
-            serde_json::from_value(json_val).map_err(|e| DbError::MappingError(e.to_string()))
+            serde_json::from_value(json_val)
+                .map_err(|e| DbError::MappingError(crate::error::describe_json_error(&e)))
         })
         .collect()
 }

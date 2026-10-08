@@ -155,10 +155,15 @@ pub trait ApiRequestDto: DeserializeOwned {
     fn cache_key(&self) -> Option<String> {
         None
     }
-    fn cache_ttl(&self) -> Option<u64> {
-        None
+    /// Time to live of the cached row, in seconds (MAIR-499: no Redis key without one).
+    /// [`DEFAULT_CACHE_TTL_SECONDS`] unless the view needs another; 0 disables the cache write.
+    fn cache_ttl(&self) -> u64 {
+        DEFAULT_CACHE_TTL_SECONDS
     }
 }
+
+/// Default time to live of a row cached by [`crate::smart_db::SmartDatabase`] (MAIR-499).
+pub const DEFAULT_CACHE_TTL_SECONDS: u64 = 300;
 
 fn build_arguments(params: &[QueryParam]) -> Result<PgArguments, DbError> {
     let mut args = PgArguments::default();

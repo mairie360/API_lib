@@ -32,10 +32,7 @@ impl ApiRequestDto for DoesUserExistByEmailQueryView {
 
 impl Display for DoesUserExistByEmailQueryView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "DoesUserExistByEmailQueryView: email = {}",
-            self.get_email()
-        )
+        // Never the e-mail itself (MAIR-290): a view is described, not its data.
+        write!(f, "DoesUserExistByEmailQueryView")
     }
 }

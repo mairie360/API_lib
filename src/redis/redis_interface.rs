@@ -186,6 +186,8 @@ impl Redis {
             ));
         }
         let mut conn = self.connection().await?;
+        // The EX option is added on the next line, always (MAIR-499).
+        // nosemgrep: gdpr-rust-redis-write-without-ttl
         let mut cmd = redis::cmd("SET");
         cmd.arg(full_key).arg(value).arg("EX").arg(seconds);
         if only_if_absent {

@@ -68,8 +68,8 @@ impl ApiRequestDto for CachedUserExistsWithShortTtlView {
     }
 
     // TTL très court de 1 seconde pour le test d'expiration
-    fn cache_ttl(&self) -> Option<u64> {
-        Some(1)
+    fn cache_ttl(&self) -> u64 {
+        1
     }
 }
 
@@ -194,7 +194,7 @@ mod smart_database_tests {
 
         // 1. On set une clé et on lui applique un TTL de 1 seconde
         redis_interface
-            .set("ttl_expiry_key", "temp_value")
+            .set_ex("ttl_expiry_key", "temp_value", 60)
             .await
             .unwrap();
         redis_interface.expire("ttl_expiry_key", 1).await.unwrap();
@@ -296,7 +296,7 @@ mod transaction_tests {
     async fn test_commit_applies_every_write_then_invalidates_the_cache() {
         let (_redis_node, redis_config) = start_redis_container().await;
         let (smart_db, redis) = smart_db(&redis_config.url).await;
-        redis.set(CACHE_KEY, "stale").await.unwrap();
+        redis.set_ex(CACHE_KEY, "stale", 60).await.unwrap();
 
         let mut tx = smart_db.begin().await.unwrap();
         tx.execute(&InsertLabel::new("commit")).await.unwrap();
@@ -329,7 +329,7 @@ mod transaction_tests {
     async fn test_dropped_or_failed_transactions_apply_nothing() {
         let (_redis_node, redis_config) = start_redis_container().await;
         let (smart_db, redis) = smart_db(&redis_config.url).await;
-        redis.set(CACHE_KEY, "kept").await.unwrap();
+        redis.set_ex(CACHE_KEY, "kept", 60).await.unwrap();
 
         {
             let mut tx = smart_db.begin().await.unwrap();
@@ -371,7 +371,7 @@ mod transaction_tests {
     async fn test_transaction_helper_commits_on_ok() {
         let (_redis_node, redis_config) = start_redis_container().await;
         let (smart_db, redis) = smart_db(&redis_config.url).await;
-        redis.set(CACHE_KEY, "stale").await.unwrap();
+        redis.set_ex(CACHE_KEY, "stale", 60).await.unwrap();
 
         let seen_inside = smart_db
             .transaction(async |tx| {
@@ -400,7 +400,7 @@ mod transaction_tests {
     async fn test_transaction_helper_rolls_back_on_err() {
         let (_redis_node, redis_config) = start_redis_container().await;
         let (smart_db, redis) = smart_db(&redis_config.url).await;
-        redis.set(CACHE_KEY, "kept").await.unwrap();
+        redis.set_ex(CACHE_KEY, "kept", 60).await.unwrap();
 
         // Refused by the endpoint's own logic after a first write.
         let refused: Result<(), EndpointError> = smart_db

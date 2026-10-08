@@ -34,6 +34,19 @@ pub enum RedisParam {
 ///
 /// Commands used: `GET`, `SET` (with `EX` / `NX` options), `DEL`, `EXISTS`, `EXPIRE`, the ones
 /// the chart's `aclCommands` grant. `SETEX` is **not** granted and must not be used.
+///
+/// # Every key expires (MAIR-499)
+///
+/// There is no write without a time to live: [`Self::set_ex`] and [`Self::secure_set_ex`] are
+/// the only writes, and a TTL of 0 is refused. A key that never expires would keep its personal
+/// data forever (sessions, one-time tokens, cached rows). Writing without one does not compile:
+///
+/// ```compile_fail
+/// # fn write(redis: &mairie360_api_lib::redis::redis_interface::Redis) {
+/// # // nosemgrep: gdpr-rust-redis-write-without-ttl (the example that must not compile)
+/// let _ = redis.set("key", "value");
+/// # }
+/// ```
 #[derive(Clone)]
 pub struct Redis {
     inner: Arc<RedisInner>,
@@ -156,16 +169,6 @@ impl Redis {
             .map_err(|e| RedisError::Driver(e.to_string()))
     }
 
-    async fn raw_set<V>(&self, full_key: &str, value: V) -> Result<(), RedisError>
-    where
-        V: ToSingleRedisArg + Send + Sync,
-    {
-        let mut conn = self.connection().await?;
-        conn.set::<_, _, ()>(full_key, value)
-            .await
-            .map_err(|e| RedisError::Driver(e.to_string()))
-    }
-
     /// `SET full_key value EX seconds [NX]`. Returns whether the key was written (always `true`
     /// without `NX`). `SET` with options, not `SETEX`: only `SET` is granted by the ACL.
     async fn raw_set_ex<V>(
@@ -184,6 +187,8 @@ impl Redis {
             ));
         }
         let mut conn = self.connection().await?;
+        // The EX option is added on the next line, always (MAIR-499).
+        // nosemgrep: gdpr-rust-redis-write-without-ttl
         let mut cmd = redis::cmd("SET");
         cmd.arg(full_key).arg(value).arg("EX").arg(seconds);
         if only_if_absent {
@@ -251,19 +256,6 @@ impl Redis {
         T: FromRedisValue,
     {
         self.raw_get(&self.full_key(key)).await
-    }
-
-    /// Sets `key` without time to live. Prefer [`Self::set_ex`] for anything temporary.
-    ///
-    /// # Errors
-    ///
-    /// Renvoie `RedisError::Pool` si aucune connexion ne peut être obtenue et
-    /// `RedisError::Driver` si Redis rejette la commande.
-    pub async fn set<V>(&self, key: &str, value: V) -> Result<(), RedisError>
-    where
-        V: ToSingleRedisArg + Send + Sync,
-    {
-        self.raw_set(&self.full_key(key), value).await
     }
 
     /// Sets `key` to `value` with a time to live of `seconds`, atomically (`SET key value EX
@@ -347,28 +339,6 @@ impl Redis {
         T: FromRedisValue,
     {
         self.raw_get::<Option<T>>(&self.full_key(key)).await
-    }
-
-    /// Sets `key` only if it does not exist yet (`SET key value NX`, atomic).
-    ///
-    /// # Errors
-    ///
-    /// Returns `RedisError::Pool` when no connection can be obtained and `RedisError::Driver`
-    /// when Redis rejects the command.
-    pub async fn secure_set<V>(&self, key: &str, value: V) -> Result<(), RedisError>
-    where
-        V: ToSingleRedisArg + Send + Sync,
-    {
-        let mut conn = self.connection().await?;
-        // `OK` when written, nil when the key already existed: both are fine.
-        let _: Option<String> = redis::cmd("SET")
-            .arg(self.full_key(key))
-            .arg(value)
-            .arg("NX")
-            .query_async(&mut conn)
-            .await
-            .map_err(|e| RedisError::Driver(e.to_string()))?;
-        Ok(())
     }
 
     /// Deletes `key`; a missing key is not an error (`DEL` is idempotent).

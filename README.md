@@ -32,3 +32,25 @@ Ajoutez cette dépendance dans votre `Cargo.toml` :
 ```toml
 [dependencies]
 mairie360-api-lib = "0.1.0"
+
+## Request logging without personal data (`request_log`, MAIR-290)
+
+A log describes a request by its type and context, never by the value it received.
+
+- APIs that log with actix's `Logger`: `App::new().wrap(mairie360_api_lib::request_log::request_logger())`
+  instead of `Logger::default()` (no query string, no `Referer`).
+- APIs that log with `tracing-actix-web` (feature `tracing-actix`):
+
+```toml
+mairie360_api_lib = { version = "3.1", features = ["tracing-actix"] }
+tracing-actix-web = { version = "0.7.25", default-features = false }
+```
+
+```rust
+use mairie360_api_lib::request_log::{hide_query, restore_query, RedactedRootSpanBuilder};
+
+App::new()
+    .wrap(middleware::from_fn(restore_query))
+    .wrap(TracingLogger::<RedactedRootSpanBuilder>::new())
+    .wrap(middleware::from_fn(hide_query))
+```

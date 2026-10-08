@@ -43,6 +43,7 @@ pub enum RedisParam {
 ///
 /// ```compile_fail
 /// # fn write(redis: &mairie360_api_lib::redis::redis_interface::Redis) {
+/// # // nosemgrep: gdpr-rust-redis-write-without-ttl (the example that must not compile)
 /// let _ = redis.set("key", "value");
 /// # }
 /// ```

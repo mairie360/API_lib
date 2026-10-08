@@ -54,3 +54,28 @@ App::new()
     .wrap(TracingLogger::<RedactedRootSpanBuilder>::new())
     .wrap(middleware::from_fn(hide_query))
 ```
+
+## Usage telemetry without identifiers (`usage`, feature `usage`, MAIR-501)
+
+What is used, how much and by how many agents, never who does what. Enable the feature and wire
+the ledger, the middleware and the endpoint the instance's OpenTelemetry Collector scrapes:
+
+```rust
+use mairie360_api_lib::usage::{usage_metrics, usage_middleware, UsageLedger, USAGE_METRICS_PATH};
+
+let ledger = web::Data::new(UsageLedger::new("core-api"));
+App::new()
+    .app_data(ledger.clone())
+    .wrap(actix_web::middleware::from_fn(usage_middleware))
+    .route(USAGE_METRICS_PATH, web::get().to(usage_metrics));
+```
+
+- Counts per service, route template (never the path with its values), method, status and period
+  (one hour): actions, distinct users, summed latency.
+- Distinct users come from a hash of the user id with a salt drawn for each period, kept in
+  memory only and dropped with the hashes when the period closes: no id, hash or salt is ever
+  logged, stored or exported.
+- Only closed periods are served, and a count under the threshold `k` (5 by default) is not: the
+  small operations are summed into one `other` entry, dropped too when it is under `k`.
+- `ALLOWED_SPAN_ATTRIBUTES` is the list of span attributes a trace may carry; the collector
+  applies the same list (Devops/Deploiment).

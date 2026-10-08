@@ -41,11 +41,14 @@ tracing = "0.1.44"
 # `request_log` for the APIs that log through tracing-actix-web (feature `tracing-actix`, MAIR-290).
 # No default feature: `emit_event_on_error` logs the `Debug` of every error.
 tracing-actix-web = { version = "0.7.25", default-features = false, optional = true }
+# Usage telemetry (feature `usage`, MAIR-501): salted hashes of the user ids, per period.
+sha2 = { version = "0.10", optional = true }
+getrandom = { version = "0.3", optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [dev-dependencies]
-mairie360_api_lib = { path = ".", features = ["test-utils", "tracing-actix"] }
+mairie360_api_lib = { path = ".", features = ["test-utils", "tracing-actix", "usage"] }
 # Captures what actix's `Logger` writes (request_log tests).
 log = "0.4"
 serial_test = "4.0.0"
@@ -62,6 +65,9 @@ test-utils = ["dep:testcontainers", "dep:tokio-postgres", "dep:libc"]
 # `request_log::{hide_query, restore_query, RedactedRootSpanBuilder, describe_error}` for the APIs
 # that use tracing-actix-web (Core_API, Message_API). `request_logger` needs no feature.
 tracing-actix = ["dep:tracing-actix-web"]
+# `usage::{UsageLedger, usage_middleware, usage_metrics}`: aggregated usage counts without any
+# identifier (MAIR-501).
+usage = ["dep:sha2", "dep:getrandom"]
 
 [lints.clippy]
 # Niveau le plus exigeant : tous les groupes sauf `restriction` (non prévu pour être activé en bloc).

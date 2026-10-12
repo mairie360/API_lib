@@ -38,11 +38,16 @@ thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["full"] }
 tokio-postgres = { version = "0.7", features = ["with-uuid-1"], optional = true }
 tracing = "0.1.44"
+# `request_log` for the APIs that log through tracing-actix-web (feature `tracing-actix`, MAIR-290).
+# No default feature: `emit_event_on_error` logs the `Debug` of every error.
+tracing-actix-web = { version = "0.7.25", default-features = false, optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [dev-dependencies]
-mairie360_api_lib = { path = ".", features = ["test-utils"] }
+mairie360_api_lib = { path = ".", features = ["test-utils", "tracing-actix"] }
+# Captures what actix's `Logger` writes (request_log tests).
+log = "0.4"
 serial_test = "4.0.0"
 temp-env = "0.3.6"
 postgres = "0.19"
@@ -54,6 +59,9 @@ default = []
 # Keycloak mock) and `email::mock_client`. Enable it in `[dev-dependencies]` only, never in
 # `[dependencies]`: it pulls testcontainers into the binary.
 test-utils = ["dep:testcontainers", "dep:tokio-postgres", "dep:libc"]
+# `request_log::{hide_query, restore_query, RedactedRootSpanBuilder, describe_error}` for the APIs
+# that use tracing-actix-web (Core_API, Message_API). `request_logger` needs no feature.
+tracing-actix = ["dep:tracing-actix-web"]
 
 [lints.clippy]
 # Niveau le plus exigeant : tous les groupes sauf `restriction` (non prévu pour être activé en bloc).

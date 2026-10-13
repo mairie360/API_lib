@@ -5,14 +5,13 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tokio_postgres::NoTls;
 
-/// Version par défaut des images `ghcr.io/mairie360/database` et
-/// `ghcr.io/mairie360/liquibase-migrations` utilisées pour les tests.
-/// Surchargeable par les services consommateurs via la variable d'env `TEST_DB_VERSION`
-/// (utile s'ils doivent tester contre une autre version que celle par défaut de la lib).
+/// Default version of the `ghcr.io/mairie360/database` and `ghcr.io/mairie360/liquibase-migrations`
+/// images used by the tests. The consumer services can override it with the `TEST_DB_VERSION`
+/// environment variable (to test against another version than the lib's default).
 ///
-/// Pinned to the latest published `dev-<sha>` image: no release carries the fix of the admin seed
-/// (MAIR-307) and the `user_identities` table (MAIR-141) yet.
-const DEFAULT_DB_VERSION: &str = "dev-fb7c223";
+/// Pinned to the latest published `dev-<sha>` image: the message change tracking and the task
+/// indexes of MAIR-524 (Database `releases/v3.1.0`) are not in any tagged release yet.
+const DEFAULT_DB_VERSION: &str = "dev-90c22bb";
 
 /// Port interne du conteneur Postgres, publié sur un port hôte aléatoire.
 const POSTGRES_PORT: u16 = 5432;

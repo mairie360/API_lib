@@ -54,8 +54,9 @@ impl SmartDatabase {
     pub async fn begin(&self) -> Result<SmartTransaction, ApiLibError> {
         Ok(SmartTransaction {
             tx: self.db.begin().await?,
-            redis: self.redis.clone(),
+            smart_db: self.clone(),
             pending_invalidations: Vec::new(),
+            pending_read_caches: Vec::new(),
         })
     }
 
@@ -117,6 +118,8 @@ impl SmartDatabase {
         if let Some(ref key) = query.cache_key() {
             let _ = self.redis.secure_delete(key).await;
         }
+        self.invalidate_read_caches(query.invalidated_read_caches())
+            .await;
 
         Ok(())
     }
@@ -144,6 +147,8 @@ impl SmartDatabase {
 
         // 2. Sinon, on tape dans PostgreSQL -> Les erreurs de DB remontent à l'API[cite: 1]
         let value: T = self.db.fetch_one(query).await?;
+        self.invalidate_read_caches(query.invalidated_read_caches())
+            .await;
 
         // 3. On remplit le cache et on applique le TTL si défini (non-bloquant)[cite: 1]
         if let Some(ref key) = cache_key {
@@ -178,6 +183,8 @@ impl SmartDatabase {
 
         // 2. Cache Miss : on interroge PostgreSQL -> Erreur remontée[cite: 1]
         let values: Vec<T> = self.db.fetch_all(query).await?;
+        self.invalidate_read_caches(query.invalidated_read_caches())
+            .await;
 
         // 3. Stockage dans Redis + application du TTL si défini (non-bloquant)[cite: 1]
         if let Some(ref key) = cache_key {
@@ -213,6 +220,8 @@ impl SmartDatabase {
 
         // 2. Cache Miss : on interroge PostgreSQL -> Erreur remontée[cite: 1]
         let value: T = self.db.fetch_scalar(query).await?;
+        self.invalidate_read_caches(query.invalidated_read_caches())
+            .await;
 
         // 3. Stockage dans Redis + application du TTL si défini (non-bloquant)[cite: 1]
         if let Some(ref key) = cache_key {
@@ -229,7 +238,8 @@ impl SmartDatabase {
 /// - Every query runs on the transaction's connection. Reads **bypass the cache**: they must
 ///   see the transaction's own uncommitted writes, and must not put them in Redis.
 /// - The cache keys of the views passed to [`Self::execute`] are invalidated only after a
-///   successful [`Self::commit`].
+///   successful [`Self::commit`], like the [`ReadCache`](super::ReadCache) namespaces listed by
+///   any view it runs (`invalidated_read_caches`, `execute` and `fetch_*` alike).
 /// - Dropping it without committing rolls the transaction back, so an early `?` return undoes
 ///   the queries already run.
 ///
@@ -241,8 +251,9 @@ impl SmartDatabase {
 /// ```
 pub struct SmartTransaction {
     tx: DbTransaction,
-    redis: Redis,
+    smart_db: SmartDatabase,
     pending_invalidations: Vec<String>,
+    pending_read_caches: Vec<&'static str>,
 }
 
 impl SmartTransaction {
@@ -258,6 +269,7 @@ impl SmartTransaction {
         if let Some(key) = query.cache_key() {
             self.pending_invalidations.push(key);
         }
+        self.queue_read_caches(query);
         Ok(())
     }
 
@@ -269,7 +281,9 @@ impl SmartTransaction {
         T: DeserializeOwned,
         Q: ApiRequestDto,
     {
-        Ok(self.tx.fetch_one(query).await?)
+        let value = self.tx.fetch_one(query).await?;
+        self.queue_read_caches(query);
+        Ok(value)
     }
 
     /// # Errors
@@ -280,7 +294,9 @@ impl SmartTransaction {
         T: DeserializeOwned,
         Q: ApiRequestDto,
     {
-        Ok(self.tx.fetch_all(query).await?)
+        let values = self.tx.fetch_all(query).await?;
+        self.queue_read_caches(query);
+        Ok(values)
     }
 
     /// # Errors
@@ -291,7 +307,9 @@ impl SmartTransaction {
         T: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send + Unpin,
         Q: ApiRequestDto,
     {
-        Ok(self.tx.fetch_scalar(query).await?)
+        let value = self.tx.fetch_scalar(query).await?;
+        self.queue_read_caches(query);
+        Ok(value)
     }
 
     /// Applies the transaction, then invalidates the cache keys of its writes (Redis failures
@@ -302,10 +320,23 @@ impl SmartTransaction {
     /// Returns an [`ApiLibError`] if `COMMIT` fails; nothing is applied nor invalidated.
     pub async fn commit(self) -> Result<(), ApiLibError> {
         self.tx.commit().await?;
+        let redis = self.smart_db.get_redis();
         for key in &self.pending_invalidations {
-            let _ = self.redis.delete(key).await;
+            let _ = redis.delete(key).await;
         }
+        self.smart_db
+            .invalidate_read_caches(&self.pending_read_caches)
+            .await;
         Ok(())
+    }
+
+    /// Read caches to invalidate on commit, each namespace once.
+    fn queue_read_caches<Q: ApiRequestDto>(&mut self, query: &Q) {
+        for namespace in query.invalidated_read_caches() {
+            if !self.pending_read_caches.contains(namespace) {
+                self.pending_read_caches.push(namespace);
+            }
+        }
     }
 
     /// Discards the transaction.

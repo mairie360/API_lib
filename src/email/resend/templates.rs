@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-// 1. Définissez vos templates métiers et leurs données obligatoires
+/// Business templates hard-coded in the lib.
+#[deprecated(
+    since = "3.1.0",
+    note = "implement `email::EmailTemplate` in the API that sends the e-mail and send it with `email::ResendMailer`"
+)]
 #[derive(Debug, Clone)]
 pub enum AppTemplate {
     // Welcome {
@@ -15,6 +19,7 @@ pub enum AppTemplate {
     },
 }
 
+#[allow(deprecated)]
 impl AppTemplate {
     // Retourne l'alias textuel visible sur le dashboard Resend
     #[must_use]

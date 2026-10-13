@@ -93,7 +93,7 @@ fn assert_error_clean(error: DbError) {
 }
 
 const INSERT_USER: &str =
-    "INSERT INTO users (first_name, last_name, email, password, phone_number) VALUES ($1, $2, $3, $4, $5)";
+    "INSERT INTO users (first_name, last_name, email, password, phone_country, phone_number) VALUES ($1, $2, $3, $4, 'FR', $5)";
 
 #[tokio::test]
 #[serial]

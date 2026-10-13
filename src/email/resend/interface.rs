@@ -1,3 +1,6 @@
+// Deprecated since 3.1.0 along with `AppTemplate`, kept until the next major.
+#![allow(deprecated)]
+
 use std::future::Future;
 
 use resend_rs::{
@@ -7,6 +10,7 @@ use resend_rs::{
 
 use crate::email::resend::templates::AppTemplate;
 
+#[deprecated(since = "3.1.0", note = "use `email::TemplateMailer`")]
 pub trait EmailService {
     fn send_template(
         &self,
@@ -15,12 +19,17 @@ pub trait EmailService {
     ) -> impl Future<Output = Result<CreateEmailResponse, resend_rs::Error>>;
 }
 
+#[deprecated(
+    since = "3.1.0",
+    note = "use `email::ResendMailer`, which always sends from `no-reply@<domain>`"
+)]
 #[derive(Clone)]
 pub struct ResendClient {
     client: Resend,
     from: String,
 }
 
+#[allow(deprecated)]
 impl ResendClient {
     // Le constructeur redevient synchrone puisqu'on ne fait plus d'appel API au démarrage
     #[must_use]
@@ -33,6 +42,7 @@ impl ResendClient {
     }
 }
 
+#[allow(deprecated)]
 impl EmailService for ResendClient {
     async fn send_template(
         &self,

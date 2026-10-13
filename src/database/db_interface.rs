@@ -158,6 +158,13 @@ pub trait ApiRequestDto: DeserializeOwned {
     fn cache_ttl(&self) -> Option<u64> {
         None
     }
+    /// The [`ReadCache`](crate::smart_db::ReadCache) namespaces this view's write makes stale
+    /// (MAIR-524). [`SmartDatabase`](crate::smart_db::SmartDatabase) gives each one a new
+    /// generation after the query succeeds (after `commit()` inside a transaction), whether it
+    /// runs through `execute` or a `fetch_*` (`INSERT … RETURNING`). Empty for reads.
+    fn invalidated_read_caches(&self) -> &'static [&'static str] {
+        &[]
+    }
 }
 
 fn build_arguments(params: &[QueryParam]) -> Result<PgArguments, DbError> {

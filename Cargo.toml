@@ -25,6 +25,11 @@ futures-util = "0.3"
 governor = "0.10"
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 libc = { version = "0.2", optional = true }
+# OpenTelemetry (`otel` feature, MAIR-503). `tracing-actix-web` only supports OpenTelemetry up to
+# 0.32 and `tracing-opentelemetry` 0.33 is the release paired with it: bump all of them together.
+opentelemetry = { version = "0.32", optional = true }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["http-proto", "trace", "reqwest-blocking-client", "reqwest-rustls"], optional = true }
+opentelemetry_sdk = { version = "0.32", optional = true }
 percent-encoding = "2"
 redis = "1.0.3"
 regex = "1"
@@ -39,11 +44,13 @@ thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["full"] }
 tokio-postgres = { version = "0.7", features = ["with-uuid-1"], optional = true }
 tracing = "0.1.44"
+tracing-actix-web = { version = "0.7.25", features = ["opentelemetry_0_32"], optional = true }
+tracing-opentelemetry = { version = "0.33", optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [dev-dependencies]
-mairie360_api_lib = { path = ".", features = ["test-utils"] }
+mairie360_api_lib = { path = ".", features = ["test-utils", "otel"] }
 serial_test = "4.0.0"
 temp-env = "0.3.6"
 postgres = "0.19"
@@ -54,7 +61,11 @@ default = []
 # Test helpers for the APIs' own tests: `test_setup` (Postgres/Redis containers, seeded fixtures,
 # Keycloak mock) and `email::mock_client`. Enable it in `[dev-dependencies]` only, never in
 # `[dependencies]`: it pulls testcontainers into the binary.
-test-utils = ["dep:testcontainers", "dep:tokio-postgres", "dep:libc"]
+# With `otel`, it also turns on `opentelemetry_sdk/testing` (`InMemorySpanExporter`).
+test-utils = ["dep:testcontainers", "dep:tokio-postgres", "dep:libc", "opentelemetry_sdk?/testing"]
+# Trace export (MAIR-503): `logging::telemetry`, OTLP/HTTP to the collector, one span per request
+# through `TracingLogger`. Every API enables it in `[dependencies]`.
+otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-actix-web", "dep:tracing-opentelemetry"]
 
 [lints.clippy]
 # Niveau le plus exigeant : tous les groupes sauf `restriction` (non prévu pour être activé en bloc).

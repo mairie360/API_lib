@@ -4,7 +4,7 @@
 //! of a call, whether the middleware answered with a response or an error.
 //!
 //! ```ignore
-//! let state = test_app_state().await;
+//! let state = test_app_state_as("project_api").await;
 //! let app = test::init_service(App::new().app_data(state).service(
 //!     web::scope("/api").wrap(JwtMiddleware).configure(config),
 //! )).await;
@@ -22,7 +22,9 @@ use actix_web::http::header::AUTHORIZATION;
 use actix_web::http::StatusCode;
 use actix_web::web;
 
-use super::queries_setup::{get_shared_db, ADMIN_ID, ALICE_ID, BOB_ID, GROUP_OWNER_ID};
+use super::queries_setup::{
+    get_shared_db, get_shared_db_as, ADMIN_ID, ALICE_ID, BOB_ID, GROUP_OWNER_ID,
+};
 use crate::jwt_manager::generate_jwt;
 use crate::state::AppState;
 
@@ -84,8 +86,12 @@ pub fn init_test_jwt_env() {
     });
 }
 
-/// An [`AppState`] on the shared seeded database, without Redis (cache misses only; tokens
-/// from [`bearer_token`] carry no `sid`, so no revocation lookup is needed).
+/// An [`AppState`] on the shared seeded database, connected as the superuser, without Redis
+/// (cache misses only; tokens from [`bearer_token`] carry no `sid`, so no revocation lookup is
+/// needed).
+///
+/// The superuser ignores the `GRANT`s: an API tests its endpoints with
+/// [`test_app_state_as`] and its own role instead (MAIR-556).
 ///
 /// # Panics
 ///
@@ -94,6 +100,20 @@ pub async fn test_app_state() -> web::Data<AppState> {
     init_test_jwt_env();
     let (_container, url) = get_shared_db().await;
     web::Data::new(AppState::new(String::new(), url.clone()).await)
+}
+
+/// Same as [`test_app_state`], connected as the API's login role `role`.
+///
+/// `role` is `core_api`, `project_api`… (see [`get_shared_db_as`]): a query the role may not run
+/// fails the test with `permission denied`, as it would in staging (MAIR-556).
+///
+/// # Panics
+///
+/// Panics if `role` is not an API role or the shared database cannot be set up.
+pub async fn test_app_state_as(role: &str) -> web::Data<AppState> {
+    init_test_jwt_env();
+    let url = get_shared_db_as(role).await;
+    web::Data::new(AppState::new(String::new(), url).await)
 }
 
 /// A historical JWT (signed with `JWT_SECRET`) for `user_id`, without `sid`.

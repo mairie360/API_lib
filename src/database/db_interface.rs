@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::database::error::DbError;
+use crate::database::pool_config::DbPoolConfig;
 
 /// A bound parameter, whose `Debug` hides the text and IP values (MAIR-290).
 ///
@@ -213,15 +214,20 @@ pub struct Database {
 
 struct DatabaseInner {
     database_url: String,
+    pool_config: DbPoolConfig,
     pool: Mutex<Option<PgPool>>,
 }
 
 impl Database {
+    /// Opens the pool sized by [`DbPoolConfig::from_env`], or starts without one (connected
+    /// lazily on the first query) when Postgres is unreachable.
     pub async fn new(database_url: &str) -> Self {
+        let pool_config = DbPoolConfig::from_env();
         Self {
             inner: Arc::new(DatabaseInner {
                 database_url: database_url.to_string(),
-                pool: match PgPool::connect(database_url).await {
+                pool_config,
+                pool: match pool_config.pool_options().connect(database_url).await {
                     Ok(pool) => Mutex::new(Some(pool)),
                     Err(e) => {
                         tracing::error!(error = %e, "Failed to connect to the database");
@@ -238,7 +244,8 @@ impl Database {
 
     /// Connects to Postgres, retrying every second until `timeout` has elapsed (MAIR-423): the
     /// database may start after the API (compose stack, rollout), but an API that never reaches
-    /// it must not start and look healthy.
+    /// it must not start and look healthy. The pool is sized by [`DbPoolConfig::from_env`]
+    /// (MAIR-565).
     ///
     /// # Errors
     ///
@@ -247,15 +254,32 @@ impl Database {
         database_url: &str,
         timeout: Duration,
     ) -> Result<Self, DbError> {
+        Self::connect_with_pool_config(database_url, timeout, DbPoolConfig::from_env()).await
+    }
+
+    /// [`Database::connect_with_retry`] with an explicit pool configuration instead of the
+    /// environment's.
+    ///
+    /// # Errors
+    ///
+    /// Returns the last connection error once `timeout` has elapsed without a connection.
+    pub async fn connect_with_pool_config(
+        database_url: &str,
+        timeout: Duration,
+        pool_config: DbPoolConfig,
+    ) -> Result<Self, DbError> {
         let deadline = Instant::now() + timeout;
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            let attempt = tokio::time::timeout(remaining, PgPool::connect(database_url)).await;
+            let attempt =
+                tokio::time::timeout(remaining, pool_config.pool_options().connect(database_url))
+                    .await;
             let error = match attempt {
                 Ok(Ok(pool)) => {
                     return Ok(Self {
                         inner: Arc::new(DatabaseInner {
                             database_url: database_url.to_string(),
+                            pool_config,
                             pool: Mutex::new(Some(pool)),
                         }),
                     })
@@ -282,6 +306,17 @@ impl Database {
         Ok(())
     }
 
+    /// Connections currently open in the pool, idle or in use (`0` without a pool). With
+    /// `min_connections` set, never below it once the pool has warmed up, even after a pause.
+    pub async fn pool_size(&self) -> u32 {
+        self.inner
+            .pool
+            .lock()
+            .await
+            .as_ref()
+            .map_or(0, PgPool::size)
+    }
+
     async fn get_pool(&self) -> Result<PgPool, DbError> {
         let mut guard = self.inner.pool.lock().await;
         if let Some(pool) = &*guard {
@@ -289,7 +324,11 @@ impl Database {
         }
 
         // Connexion paresseuse si le pool est vide
-        let pool = PgPool::connect(&self.inner.database_url)
+        let pool = self
+            .inner
+            .pool_config
+            .pool_options()
+            .connect(&self.inner.database_url)
             .await
             .map_err(|_| DbError::Sqlx(sqlx::Error::PoolClosed))?;
 

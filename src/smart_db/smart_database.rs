@@ -34,16 +34,16 @@ impl SmartDatabase {
     }
 
     /// Writes `value` under `key` unless another request already did, with the view's time to
-    /// live in the same command (`SET … [EX ttl] NX`), so a key never lingers without its TTL.
-    /// Failures are ignored: the cache is only an optimisation.
-    async fn populate_cache<V>(&self, key: &str, value: V, ttl: Option<u64>)
+    /// live in the same command (`SET … EX ttl NX`), so a key never exists without its TTL
+    /// (MAIR-499). A TTL of 0 skips the write. Failures are ignored: the cache is only an
+    /// optimisation.
+    async fn populate_cache<V>(&self, key: &str, value: V, ttl: u64)
     where
         V: ToSingleRedisArg + Send + Sync,
     {
-        let _ = match ttl.filter(|ttl| *ttl > 0) {
-            Some(ttl) => self.redis.secure_set_ex(key, value, ttl).await.map(|_| ()),
-            None => self.redis.secure_set(key, value).await,
-        };
+        if ttl > 0 {
+            let _ = self.redis.secure_set_ex(key, value, ttl).await;
+        }
     }
 
     /// Starts a transaction (see [`SmartTransaction`]).

@@ -1,4 +1,4 @@
-use super::db_setup::start_postgres_container;
+use super::db_setup::{start_postgres_container, API_ROLES, TEST_API_ROLE_PASSWORD};
 use crate::password::hash_password;
 use futures_util::FutureExt;
 use std::env;
@@ -288,6 +288,39 @@ pub async fn get_shared_db() -> &'static (ContainerAsync<GenericImage>, String) 
             panic!("The shared test database setup failed, nothing was retried: {reason}")
         }
     }
+}
+
+/// URL of the shared test database (see [`get_shared_db`]) for the login role `role` of an
+/// API (`core_api`, `project_api`… see [`API_ROLES`]) instead of the superuser (MAIR-556).
+///
+/// Connect the application code under test (its `AppState`, its query views) with it, and
+/// keep the superuser URL of [`get_shared_db`] for the fixtures only: a superuser ignores the
+/// `GRANT`s, so a query the API's role may not run would pass the tests and fail in staging
+/// with `permission denied`.
+///
+/// ```ignore
+/// let pool = Database::new(&get_shared_db_as("project_api").await).await;
+/// ```
+///
+/// # Panics
+///
+/// Panics if `role` is not one of [`API_ROLES`] or the shared database cannot be set up.
+pub async fn get_shared_db_as(role: &str) -> String {
+    assert!(
+        API_ROLES.contains(&role),
+        "{role} is not an API role of the test database, expected one of {API_ROLES:?}"
+    );
+    let (_container, superuser_url) = get_shared_db().await;
+    role_url(superuser_url, role)
+}
+
+/// `superuser_url` (`postgres://postgres:postgres@<host>:<port>/<db>`) with `role`'s
+/// credentials.
+fn role_url(superuser_url: &str, role: &str) -> String {
+    let address = superuser_url
+        .strip_prefix("postgres://postgres:postgres@")
+        .expect("the shared test database URL is built by setup_test_container");
+    format!("postgres://{role}:{TEST_API_ROLE_PASSWORD}@{address}")
 }
 
 async fn init_shared_db() -> (ContainerAsync<GenericImage>, String) {

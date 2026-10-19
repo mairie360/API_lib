@@ -9,9 +9,9 @@ use tokio_postgres::NoTls;
 /// images used by the tests. The consumer services can override it with the `TEST_DB_VERSION`
 /// environment variable (to test against another version than the lib's default).
 ///
-/// Pinned to the latest published `dev-<sha>` image: the message change tracking and the task
-/// indexes of MAIR-524 (Database `releases/v3.1.0`) are not in any tagged release yet.
-const DEFAULT_DB_VERSION: &str = "dev-90c22bb";
+/// Pinned to the latest published `dev-<sha>` image: the `compliance_api` role and the grants
+/// the API roles need for the middlewares (MAIR-556) are not in any tagged release yet.
+const DEFAULT_DB_VERSION: &str = "dev-949384c";
 
 /// Port interne du conteneur Postgres, publié sur un port hôte aléatoire.
 const POSTGRES_PORT: u16 = 5432;

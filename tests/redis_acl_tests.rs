@@ -28,7 +28,7 @@ async fn role_prefix_comes_from_the_url_and_keys_work_under_the_acl() {
     let core = Redis::new(&config.url_as("core-api"));
     assert_eq!(core.key_prefix(), Some("core-api"));
 
-    core.set("plain", "value").await.unwrap();
+    core.set_ex("plain", "value", 60).await.unwrap();
     assert_eq!(core.get::<String>("plain").await.unwrap(), "value");
     core.set_ex("temporary", "value", 120).await.unwrap();
     assert!(core.secure_set_ex("once", "first", 60).await.unwrap());
@@ -37,7 +37,7 @@ async fn role_prefix_comes_from_the_url_and_keys_work_under_the_acl() {
         core.secure_get::<String>("once").await.unwrap().as_deref(),
         Some("first")
     );
-    core.secure_set("cache", "value").await.unwrap();
+    core.secure_set_ex("cache", "value", 60).await.unwrap();
     core.expire("cache", 30).await.unwrap();
     assert!(core.key_exist("cache").await.unwrap());
     core.secure_delete("plain").await.unwrap();
@@ -62,11 +62,11 @@ async fn unprefixed_or_foreign_keys_are_refused() {
 
     // Without the prefix, the ACL refuses the key: this was the bug.
     let unprefixed = Redis::with_key_prefix(&config.url_as("core-api"), None);
-    assert!(unprefixed.set("plain", "value").await.is_err());
+    assert!(unprefixed.set_ex("plain", "value", 60).await.is_err());
 
     // A role cannot touch another role's keys.
     let project_as_core = Redis::with_key_prefix(&config.url_as("project-api"), Some("core-api"));
-    assert!(project_as_core.set("plain", "value").await.is_err());
+    assert!(project_as_core.set_ex("plain", "value", 60).await.is_err());
     assert!(project_as_core.key_exist("plain").await.is_err());
 
     // Its own keys work.

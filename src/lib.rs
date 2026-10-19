@@ -8,6 +8,7 @@ pub mod logging;
 pub mod pagination;
 pub mod password;
 pub mod redis;
+pub mod request_log;
 pub mod security;
 pub mod smart_db;
 pub mod state;

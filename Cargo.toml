@@ -44,13 +44,17 @@ thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["full"] }
 tokio-postgres = { version = "0.7", features = ["with-uuid-1"], optional = true }
 tracing = "0.1.44"
-tracing-actix-web = { version = "0.7.25", features = ["opentelemetry_0_32"], optional = true }
+# `request_log` (feature `tracing-actix`, MAIR-290) and `TracingLogger` (feature `otel`, MAIR-503).
+# No default feature: `emit_event_on_error` logs the `Debug` of every error.
+tracing-actix-web = { version = "0.7.25", default-features = false, optional = true }
 tracing-opentelemetry = { version = "0.33", optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [dev-dependencies]
-mairie360_api_lib = { path = ".", features = ["test-utils", "otel"] }
+mairie360_api_lib = { path = ".", features = ["test-utils", "otel", "tracing-actix"] }
+# Captures what actix's `Logger` writes (request_log tests).
+log = "0.4"
 serial_test = "4.0.0"
 temp-env = "0.3.6"
 postgres = "0.19"
@@ -65,7 +69,10 @@ default = []
 test-utils = ["dep:testcontainers", "dep:tokio-postgres", "dep:libc", "opentelemetry_sdk?/testing"]
 # Trace export (MAIR-503): `logging::telemetry`, OTLP/HTTP to the collector, one span per request
 # through `TracingLogger`. Every API enables it in `[dependencies]`.
-otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-actix-web", "dep:tracing-opentelemetry"]
+otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-actix-web", "tracing-actix-web/opentelemetry_0_32", "dep:tracing-opentelemetry"]
+# `request_log::{hide_query, restore_query, RedactedRootSpanBuilder, describe_error}` for the APIs
+# that use tracing-actix-web (Core_API, Message_API). `request_logger` needs no feature.
+tracing-actix = ["dep:tracing-actix-web"]
 
 [lints.clippy]
 # Niveau le plus exigeant : tous les groupes sauf `restriction` (non prévu pour être activé en bloc).

@@ -2294,6 +2294,7 @@ dependencies = [
  "governor",
  "jsonwebtoken",
  "libc",
+ "log",
  "mairie360_api_lib",
  "opentelemetry",
  "opentelemetry-otlp",

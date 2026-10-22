@@ -1,4 +1,7 @@
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    HttpResponse, ResponseError,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -37,6 +40,8 @@ impl ResponseError for RedisError {
         }
 
         // Generic body: the driver message is logged above, not sent to the client (MAIR-391).
-        HttpResponse::InternalServerError().body("Internal cache error")
+        HttpResponse::InternalServerError()
+            .content_type(ContentType::plaintext())
+            .body("Internal cache error")
     }
 }

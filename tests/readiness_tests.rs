@@ -2,7 +2,10 @@
 
 use std::time::{Duration, Instant};
 
-use actix_web::{body::to_bytes, http::StatusCode};
+use actix_web::{
+    body::to_bytes,
+    http::{header::CONTENT_TYPE, StatusCode},
+};
 use mairie360_api_lib::database::db_interface::Database;
 use mairie360_api_lib::state::{AppState, Readiness, DB_CONNECT_TIMEOUT_ENV};
 use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
@@ -25,6 +28,11 @@ fn setup() {
 
 async fn body_of(readiness: Readiness) -> (StatusCode, String) {
     let response = readiness.to_response();
+    // MAIR-262: documented as text/plain by the APIs.
+    assert_eq!(
+        response.headers().get(CONTENT_TYPE).unwrap(),
+        "text/plain; charset=utf-8"
+    );
     let status = response.status();
     let body = to_bytes(response.into_body()).await.unwrap();
     (status, String::from_utf8(body.to_vec()).unwrap())

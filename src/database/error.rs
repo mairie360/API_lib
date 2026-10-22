@@ -1,6 +1,9 @@
 use std::fmt::{self, Write as _};
 
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    HttpResponse, ResponseError,
+};
 use sqlx::postgres::PgDatabaseError;
 use thiserror::Error;
 
@@ -151,6 +154,8 @@ impl ResponseError for DbError {
             Self::ForeignKeyViolation(_) => "Invalid reference to another resource",
             Self::MappingError(_) | Self::Internal(_) | Self::Sqlx(_) => "Internal database error",
         };
-        HttpResponse::build(self.status_code()).body(body)
+        HttpResponse::build(self.status_code())
+            .content_type(ContentType::plaintext())
+            .body(body)
     }
 }

@@ -1,6 +1,9 @@
 // Fichier : src/email/error.rs
 
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    HttpResponse, ResponseError,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -24,6 +27,8 @@ impl ResponseError for EmailError {
             }
         }
 
-        HttpResponse::InternalServerError().body("Échec lors de l'envoi de l'e-mail")
+        HttpResponse::InternalServerError()
+            .content_type(ContentType::plaintext())
+            .body("Échec lors de l'envoi de l'e-mail")
     }
 }

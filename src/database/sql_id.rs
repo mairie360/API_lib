@@ -1,7 +1,10 @@
 use std::fmt;
 use std::str::FromStr;
 
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    HttpResponse, ResponseError,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
@@ -38,7 +41,9 @@ impl ResponseError for InvalidId {
     }
 
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::BadRequest().body(self.to_string())
+        HttpResponse::BadRequest()
+            .content_type(ContentType::plaintext())
+            .body(self.to_string())
     }
 }
 

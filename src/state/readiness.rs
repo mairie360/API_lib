@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::time::Duration;
 
-use actix_web::HttpResponse;
+use actix_web::{http::header::ContentType, HttpResponse};
 
 /// Longest time a dependency check of [`super::AppState::readiness`] may take before it counts
 /// as down. Keep the readiness probe's `timeoutSeconds` above it.
@@ -38,9 +38,12 @@ impl Readiness {
     #[must_use]
     pub fn to_response(&self) -> HttpResponse {
         if self.is_ready() {
-            HttpResponse::Ok().body("ready")
+            HttpResponse::Ok()
+                .content_type(ContentType::plaintext())
+                .body("ready")
         } else {
             HttpResponse::ServiceUnavailable()
+                .content_type(ContentType::plaintext())
                 .body(format!("not ready: {}", self.down().join(", ")))
         }
     }

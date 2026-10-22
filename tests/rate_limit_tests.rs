@@ -3,7 +3,10 @@
 use std::num::NonZeroU32;
 
 use actix_web::{
-    http::{header::RETRY_AFTER, StatusCode},
+    http::{
+        header::{CONTENT_TYPE, RETRY_AFTER},
+        StatusCode,
+    },
     middleware::from_fn,
     test as actix_test, web, App, HttpMessage, HttpResponse,
 };
@@ -50,6 +53,11 @@ async fn a_caller_over_its_burst_gets_429_with_retry_after() {
     }
     let res = actix_test::call_service(&app, from_peer("10.0.0.1").to_request()).await;
     assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+    // MAIR-262: documented as text/plain by the APIs.
+    assert_eq!(
+        res.headers().get(CONTENT_TYPE).unwrap(),
+        "text/plain; charset=utf-8"
+    );
     let retry_after: u64 = res
         .headers()
         .get(RETRY_AFTER)

@@ -70,8 +70,9 @@ feature-depth = 1
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
-    { id = "RUSTSEC-2023-0071", reason = "Pas de correctif disponible pour rsa" },
-    { id = "RUSTSEC-2026-0258", reason = "En attente d'une mise à jour d'actix-web pour passer sur h2 0.4" },
+    { id = "RUSTSEC-2023-0071", reason = "No fixed rsa release exists" },
+    { id = "RUSTSEC-2026-0258", reason = "Waiting for an actix-web update that moves to h2 0.4" },
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 is pinned by elliptic-curve 0.13 (jsonwebtoken 11.1, latest, through p256/p384); only used to verify ES256/ES384 Keycloak signatures with public keys, no secret involved. Drop once jsonwebtoken moves to elliptic-curve 0.14, and at once if code starts using an EC private key" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.

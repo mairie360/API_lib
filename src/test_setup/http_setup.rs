@@ -31,6 +31,21 @@ use crate::state::AppState;
 /// `JWT_SECRET` set by [`init_test_jwt_env`] when the test binary did not set one.
 pub const TEST_JWT_SECRET: &str = "test-only-jwt-secret-for-endpoint-tests";
 
+/// Ed25519 private key of the test key pair (MAIR-680, `JWT_PRIVATE_KEY`).
+///
+/// For tests of tokens signed like Core signs them. Committed on purpose: `enforce_jwt_config`
+/// refuses its public key outside test stacks.
+pub const TEST_JWT_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIB0n4h8LIrWP97xwhhjiuwTUvTF3l1E0MlDPQdPtlWcN
+-----END PRIVATE KEY-----
+";
+
+/// Ed25519 public key of the test key pair (`JWT_PUBLIC_KEY`), see [`TEST_JWT_PRIVATE_KEY`].
+pub const TEST_JWT_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAKW8bV4kiFUo8hmOEU3+lXdqZL1wmKvBw6smUyjpmXks=
+-----END PUBLIC KEY-----
+";
+
 /// `JWT_TIMEOUT` (seconds) set by [`init_test_jwt_env`] when the test binary did not set one.
 pub const TEST_JWT_TIMEOUT: &str = "3600";
 

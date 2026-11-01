@@ -346,3 +346,24 @@ fn mair_680_configuration_checks_the_keys() {
         assert_eq!(validate_jwt_config(), Err(JwtConfigError::KnownTestSecret));
     });
 }
+
+#[test]
+fn mair_680_a_blank_jwt_secret_never_verifies_nor_signs_hs256() {
+    // Review finding: with the public key set, a blank JWT_SECRET passes the configuration check;
+    // it must not become an empty HMAC key that anybody can sign with.
+    for blank in ["", "   "] {
+        let forged = encode(
+            &Header::new(Algorithm::HS256),
+            &Claims::new("1", "Admin", in_one_hour()),
+            &EncodingKey::from_secret(blank.as_bytes()),
+        )
+        .unwrap();
+        with_keys(Some(TEST_JWT_PUBLIC_KEY), None, Some(blank), || {
+            assert!(decode_jwt(&forged).is_err(), "{blank:?} verified a token");
+            assert!(
+                generate_session_jwt("1", "Admin", None).is_err(),
+                "{blank:?} signed a token"
+            );
+        });
+    }
+}

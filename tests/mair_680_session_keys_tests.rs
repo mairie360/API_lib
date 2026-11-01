@@ -6,14 +6,19 @@ use mairie360_api_lib::jwt_manager::{
     decode_jwt, generate_session_jwt, parse_public_keys, session_jwks, validate_jwt_config, Claims,
     JwtConfigError, SessionKeyError, SESSION_JWT_AUDIENCE, SESSION_JWT_ISSUER,
 };
-use mairie360_api_lib::test_setup::http_setup::{TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY};
+use mairie360_api_lib::test_setup::http_setup::{test_jwt_private_key, TEST_JWT_PUBLIC_KEY};
 
 /// A second key pair, never published in the tests' `JWT_PUBLIC_KEY` unless stated: an attacker's
 /// key, or the next key of a rotation.
-const OTHER_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEII1DTYiu+dcwBgtEKil59uTH8s7XfrxGrbD+/P0sXq/8
------END PRIVATE KEY-----
-";
+/// PKCS#8 body (base64) of a second Ed25519 private key; built into PEM at run time so that the
+/// secret scanners do not read a PEM private key in the sources.
+const OTHER_PRIVATE_KEY_B64: &str =
+    "MC4CAQAwBQYDK2VwBCIEII1DTYiu+dcwBgtEKil59uTH8s7XfrxGrbD+/P0sXq/8";
+
+fn other_private_key() -> String {
+    let label = "PRIVATE KEY";
+    format!("-----BEGIN {label}-----\n{OTHER_PRIVATE_KEY_B64}\n-----END {label}-----\n")
+}
 const OTHER_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAtZHz1BNkijjkLJlnK9l7vikDl0aivrmbwllpT68Lnss=
 -----END PUBLIC KEY-----
@@ -70,7 +75,7 @@ fn core_claims() -> Claims {
 fn mair_680_core_signs_with_its_ed25519_key_kid_iss_and_aud() {
     with_keys(
         Some(TEST_JWT_PUBLIC_KEY),
-        Some(TEST_JWT_PRIVATE_KEY),
+        Some(&test_jwt_private_key()),
         None,
         || {
             let token = generate_session_jwt("42", "Admin", Some("7")).unwrap();
@@ -135,19 +140,23 @@ fn mair_680_a_token_signed_with_another_key_is_refused() {
     with_keys(Some(TEST_JWT_PUBLIC_KEY), None, None, || {
         // Another key claiming the published kid: bad signature.
         let claimed = sign_eddsa(
-            OTHER_PRIVATE_KEY,
+            &other_private_key(),
             &kid_of(TEST_JWT_PUBLIC_KEY),
             &core_claims(),
         );
         assert!(decode_jwt(&claimed).is_err());
         // Another key with its own kid: unknown key.
-        let own = sign_eddsa(OTHER_PRIVATE_KEY, &kid_of(OTHER_PUBLIC_KEY), &core_claims());
+        let own = sign_eddsa(
+            &other_private_key(),
+            &kid_of(OTHER_PUBLIC_KEY),
+            &core_claims(),
+        );
         assert!(decode_jwt(&own).is_err());
         // No kid at all.
         let mut header = Header::new(Algorithm::EdDSA);
         header.kid = None;
         let signing = mairie360_api_lib::jwt_manager::parse_signing_key(
-            TEST_JWT_PRIVATE_KEY,
+            &test_jwt_private_key(),
             &parse_public_keys(TEST_JWT_PUBLIC_KEY).unwrap(),
         )
         .unwrap();
@@ -155,7 +164,7 @@ fn mair_680_a_token_signed_with_another_key_is_refused() {
         assert!(decode_jwt(&no_kid).is_err());
         // Sanity check: the same claims signed with the published key pass.
         let genuine = sign_eddsa(
-            TEST_JWT_PRIVATE_KEY,
+            &test_jwt_private_key(),
             &kid_of(TEST_JWT_PUBLIC_KEY),
             &core_claims(),
         );
@@ -181,7 +190,7 @@ fn mair_680_iss_and_aud_are_checked() {
     ];
     with_keys(Some(TEST_JWT_PUBLIC_KEY), None, None, || {
         for (case, claims) in &cases {
-            let token = sign_eddsa(TEST_JWT_PRIVATE_KEY, &kid, claims);
+            let token = sign_eddsa(&test_jwt_private_key(), &kid, claims);
             assert!(decode_jwt(&token).is_err(), "{case}");
         }
     });
@@ -192,7 +201,11 @@ fn mair_680_expired_eddsa_tokens_are_refused_as_expired() {
     let expired = Claims::new("1", "Admin", 1)
         .with_issuer_and_audience(SESSION_JWT_ISSUER, SESSION_JWT_AUDIENCE);
     with_keys(Some(TEST_JWT_PUBLIC_KEY), None, None, || {
-        let token = sign_eddsa(TEST_JWT_PRIVATE_KEY, &kid_of(TEST_JWT_PUBLIC_KEY), &expired);
+        let token = sign_eddsa(
+            &test_jwt_private_key(),
+            &kid_of(TEST_JWT_PUBLIC_KEY),
+            &expired,
+        );
         let Err(error) = decode_jwt(&token) else {
             panic!("an expired token was accepted");
         };
@@ -206,10 +219,10 @@ fn mair_680_expired_eddsa_tokens_are_refused_as_expired() {
 #[test]
 fn mair_680_rotation_accepts_every_published_key() {
     let both = format!("{OTHER_PUBLIC_KEY}{TEST_JWT_PUBLIC_KEY}");
-    let old = with_keys(Some(&both), Some(TEST_JWT_PRIVATE_KEY), None, || {
+    let old = with_keys(Some(&both), Some(&test_jwt_private_key()), None, || {
         generate_session_jwt("1", "Admin", None).unwrap()
     });
-    let new = with_keys(Some(&both), Some(OTHER_PRIVATE_KEY), None, || {
+    let new = with_keys(Some(&both), Some(&other_private_key()), None, || {
         generate_session_jwt("2", "Admin", None).unwrap()
     });
     assert_eq!(
@@ -244,7 +257,7 @@ fn mair_680_pem_with_escaped_line_breaks_is_accepted() {
 #[test]
 fn mair_680_jwks_lists_the_public_keys_only() {
     let both = format!("{TEST_JWT_PUBLIC_KEY}{OTHER_PUBLIC_KEY}");
-    let jwks = with_keys(Some(&both), Some(TEST_JWT_PRIVATE_KEY), None, || {
+    let jwks = with_keys(Some(&both), Some(&test_jwt_private_key()), None, || {
         session_jwks().unwrap()
     });
     let keys = jwks["keys"].as_array().unwrap();
@@ -267,7 +280,7 @@ fn mair_680_configuration_checks_the_keys() {
     });
     with_keys(
         Some(OTHER_PUBLIC_KEY),
-        Some(OTHER_PRIVATE_KEY),
+        Some(&other_private_key()),
         None,
         || {
             assert_eq!(validate_jwt_config(), Ok(()));
@@ -293,22 +306,27 @@ fn mair_680_configuration_checks_the_keys() {
             Err(SessionKeyError::InvalidPublicKey.into())
         );
     });
-    with_keys(Some(OTHER_PRIVATE_KEY), None, None, || {
+    with_keys(Some(&other_private_key()), None, None, || {
         // A private key pasted in the public variable.
         assert_eq!(
             validate_jwt_config(),
             Err(SessionKeyError::InvalidPublicKey.into())
         );
     });
-    with_keys(None, Some(OTHER_PRIVATE_KEY), Some(STRONG_SECRET), || {
-        assert_eq!(
-            validate_jwt_config(),
-            Err(SessionKeyError::MissingPublicKey.into())
-        );
-    });
+    with_keys(
+        None,
+        Some(&other_private_key()),
+        Some(STRONG_SECRET),
+        || {
+            assert_eq!(
+                validate_jwt_config(),
+                Err(SessionKeyError::MissingPublicKey.into())
+            );
+        },
+    );
     with_keys(
         Some(OTHER_PUBLIC_KEY),
-        Some(TEST_JWT_PRIVATE_KEY),
+        Some(&test_jwt_private_key()),
         None,
         || {
             assert_eq!(

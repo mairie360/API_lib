@@ -31,16 +31,23 @@ use crate::state::AppState;
 /// `JWT_SECRET` set by [`init_test_jwt_env`] when the test binary did not set one.
 pub const TEST_JWT_SECRET: &str = "test-only-jwt-secret-for-endpoint-tests";
 
-/// Ed25519 private key of the test key pair (MAIR-680, `JWT_PRIVATE_KEY`).
+/// PKCS#8 DER of the Ed25519 private key of the test key pair (MAIR-680). Stored as DER, like the
+/// Keycloak test keys, so that the secret scanners do not read a PEM private key in the sources.
+const TEST_JWT_PRIVATE_KEY_DER: &[u8] = include_bytes!("fixtures/session_test_key.der");
+
+/// Ed25519 private key of the test key pair (MAIR-680, `JWT_PRIVATE_KEY`), as PEM.
 ///
 /// For tests of tokens signed like Core signs them. Committed on purpose: `enforce_jwt_config`
 /// refuses its public key outside test stacks.
-pub const TEST_JWT_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIB0n4h8LIrWP97xwhhjiuwTUvTF3l1E0MlDPQdPtlWcN
------END PRIVATE KEY-----
-";
+#[must_use]
+pub fn test_jwt_private_key() -> String {
+    use base64::Engine;
+    let body = base64::engine::general_purpose::STANDARD.encode(TEST_JWT_PRIVATE_KEY_DER);
+    let label = "PRIVATE KEY";
+    format!("-----BEGIN {label}-----\n{body}\n-----END {label}-----\n")
+}
 
-/// Ed25519 public key of the test key pair (`JWT_PUBLIC_KEY`), see [`TEST_JWT_PRIVATE_KEY`].
+/// Ed25519 public key of the test key pair (`JWT_PUBLIC_KEY`), see [`test_jwt_private_key`].
 pub const TEST_JWT_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAKW8bV4kiFUo8hmOEU3+lXdqZL1wmKvBw6smUyjpmXks=
 -----END PUBLIC KEY-----

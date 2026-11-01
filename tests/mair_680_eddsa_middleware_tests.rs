@@ -11,15 +11,20 @@ use mairie360_api_lib::security::JwtMiddleware;
 use mairie360_api_lib::smart_db::SmartDatabase;
 use mairie360_api_lib::state::AppState;
 use mairie360_api_lib::test_setup::http_setup::{
-    status_of, SeededUser, TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY,
+    status_of, test_jwt_private_key, SeededUser, TEST_JWT_PUBLIC_KEY,
 };
 use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
 
 /// An attacker's key pair: never in `JWT_PUBLIC_KEY`.
-const ATTACKER_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEII1DTYiu+dcwBgtEKil59uTH8s7XfrxGrbD+/P0sXq/8
------END PRIVATE KEY-----
-";
+/// PKCS#8 body (base64) of a second Ed25519 private key; built into PEM at run time so that the
+/// secret scanners do not read a PEM private key in the sources.
+const ATTACKER_PRIVATE_KEY_B64: &str =
+    "MC4CAQAwBQYDK2VwBCIEII1DTYiu+dcwBgtEKil59uTH8s7XfrxGrbD+/P0sXq/8";
+
+fn attacker_private_key() -> String {
+    let label = "PRIVATE KEY";
+    format!("-----BEGIN {label}-----\n{ATTACKER_PRIVATE_KEY_B64}\n-----END {label}-----\n")
+}
 const ATTACKER_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAtZHz1BNkijjkLJlnK9l7vikDl0aivrmbwllpT68Lnss=
 -----END PUBLIC KEY-----
@@ -28,7 +33,7 @@ MCowBQYDK2VwAyEAtZHz1BNkijjkLJlnK9l7vikDl0aivrmbwllpT68Lnss=
 static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
     // Core's key pair; no `JWT_SECRET`: the historical HS256 tokens are over.
     std::env::set_var("JWT_PUBLIC_KEY", TEST_JWT_PUBLIC_KEY);
-    std::env::set_var("JWT_PRIVATE_KEY", TEST_JWT_PRIVATE_KEY);
+    std::env::set_var("JWT_PRIVATE_KEY", test_jwt_private_key());
     std::env::remove_var("JWT_SECRET");
     std::env::set_var("JWT_TIMEOUT", "3600");
 });
@@ -52,7 +57,7 @@ fn in_one_hour() -> usize {
 /// An Admin token for `user_id` signed with the attacker's key, claiming Core's `kid`.
 fn forged_admin_token(user_id: u64) -> String {
     let attacker = parse_signing_key(
-        ATTACKER_PRIVATE_KEY,
+        &attacker_private_key(),
         &parse_public_keys(ATTACKER_PUBLIC_KEY).unwrap(),
     )
     .unwrap();

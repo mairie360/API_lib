@@ -39,6 +39,13 @@ pub use validate_jwt_config::{
     ALLOW_WEAK_SECRET_ENV, MIN_JWT_SECRET_LEN, REQUIRE_SESSION_ENV,
 };
 
+mod session_keys;
+pub use session_keys::{
+    parse_public_keys, parse_signing_key, session_jwks, session_public_keys, session_signing_key,
+    SessionKeyError, SessionPublicKey, SessionSigningKey, PRIVATE_KEY_ENV, PUBLIC_KEY_ENV,
+    SESSION_JWT_AUDIENCE, SESSION_JWT_ISSUER,
+};
+
 mod session_revocation;
 pub use session_revocation::{
     is_session_revoked, revoke_session, revoked_session_key, REVOKED_SESSION_KEY_PREFIX,

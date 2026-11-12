@@ -1,3 +1,4 @@
+use super::session_keys::{session_public_keys, session_signing_key, SessionKeyError};
 use crate::env_manager::get_env_var;
 use thiserror::Error;
 
@@ -17,6 +18,11 @@ const KNOWN_TEST_SECRETS: [&str; 8] = [
     "your-secret-key",
 ];
 
+/// `x` (base64url) of the Ed25519 public keys committed in the repositories: the test key pair of
+/// `test_setup` (`http_setup::TEST_JWT_PUBLIC_KEY`). Anybody can sign tokens
+/// for a deployment that trusts them.
+const KNOWN_TEST_PUBLIC_KEYS: [&str; 1] = ["KW8bV4kiFUo8hmOEU3-lXdqZL1wmKvBw6smUyjpmXks"];
+
 /// Set to `true` (or `1`) to start with a weak `JWT_SECRET` (dev, ZAP, k6 and integration
 /// stacks). Never set it in a real deployment.
 pub const ALLOW_WEAK_SECRET_ENV: &str = "JWT_ALLOW_WEAK_SECRET";
@@ -25,11 +31,16 @@ pub const ALLOW_WEAK_SECRET_ENV: &str = "JWT_ALLOW_WEAK_SECRET";
 /// revoked before they expire (see [`super::generate_session_jwt`]).
 pub const REQUIRE_SESSION_ENV: &str = "JWT_REQUIRE_SESSION";
 
-/// A defect of the `JWT_SECRET` / `JWT_TIMEOUT` configuration.
+/// A defect of the `JWT_PUBLIC_KEY` / `JWT_PRIVATE_KEY` / `JWT_SECRET` / `JWT_TIMEOUT`
+/// configuration.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum JwtConfigError {
-    #[error("JWT_SECRET is not set")]
+    #[error("neither JWT_PUBLIC_KEY nor JWT_SECRET is set")]
     MissingSecret,
+    #[error(transparent)]
+    InvalidSessionKey(#[from] SessionKeyError),
+    #[error("JWT_PUBLIC_KEY holds a well-known test key")]
+    KnownTestKey,
     #[error("JWT_SECRET is {0} bytes long, at least {MIN_JWT_SECRET_LEN} are required")]
     SecretTooShort(usize),
     #[error("JWT_SECRET is a well-known test value")]
@@ -44,7 +55,10 @@ impl JwtConfigError {
     /// The secret is set but weak: tolerated when [`ALLOW_WEAK_SECRET_ENV`] is enabled.
     #[must_use]
     pub const fn is_weak_secret(&self) -> bool {
-        matches!(self, Self::SecretTooShort(_) | Self::KnownTestSecret)
+        matches!(
+            self,
+            Self::SecretTooShort(_) | Self::KnownTestSecret | Self::KnownTestKey
+        )
     }
 }
 
@@ -61,24 +75,42 @@ pub fn is_session_required() -> bool {
     is_enabled(REQUIRE_SESSION_ENV)
 }
 
-/// Checks `JWT_SECRET` and `JWT_TIMEOUT` as read from the environment.
+/// Checks the session token keys and `JWT_TIMEOUT` as read from the environment (MAIR-680).
 ///
-/// The secret must be set, at least [`MIN_JWT_SECRET_LEN`] bytes long and not a well-known test
-/// value; the timeout must be a positive integer.
+/// - `JWT_PUBLIC_KEY`, when set, must hold Ed25519 public keys, none of them a committed test
+///   key;
+/// - `JWT_PRIVATE_KEY`, when set (Core only), must be an Ed25519 private key whose public key is
+///   in `JWT_PUBLIC_KEY`;
+/// - `JWT_SECRET` is optional once `JWT_PUBLIC_KEY` is set; when set (historical HS256 tokens,
+///   transition), it must be at least [`MIN_JWT_SECRET_LEN`] bytes long and not a well-known
+///   test value;
+/// - the timeout must be a positive integer.
 ///
 /// # Errors
 ///
-/// Returns the first [`JwtConfigError`] found, secret first.
+/// Returns the first [`JwtConfigError`] found: keys, then secret, then timeout.
 pub fn validate_jwt_config() -> Result<(), JwtConfigError> {
-    let secret = get_env_var("JWT_SECRET")
-        .filter(|secret| !secret.trim().is_empty())
-        .ok_or(JwtConfigError::MissingSecret)?;
-    let normalized = secret.trim().to_ascii_lowercase();
-    if KNOWN_TEST_SECRETS.contains(&normalized.as_str()) {
-        return Err(JwtConfigError::KnownTestSecret);
+    let public_keys = session_public_keys()?;
+    session_signing_key()?;
+    if public_keys
+        .iter()
+        .any(|key| KNOWN_TEST_PUBLIC_KEYS.contains(&key.x()))
+    {
+        return Err(JwtConfigError::KnownTestKey);
     }
-    if secret.len() < MIN_JWT_SECRET_LEN {
-        return Err(JwtConfigError::SecretTooShort(secret.len()));
+
+    match get_env_var("JWT_SECRET").filter(|secret| !secret.trim().is_empty()) {
+        Some(secret) => {
+            let normalized = secret.trim().to_ascii_lowercase();
+            if KNOWN_TEST_SECRETS.contains(&normalized.as_str()) {
+                return Err(JwtConfigError::KnownTestSecret);
+            }
+            if secret.len() < MIN_JWT_SECRET_LEN {
+                return Err(JwtConfigError::SecretTooShort(secret.len()));
+            }
+        }
+        None if public_keys.is_empty() => return Err(JwtConfigError::MissingSecret),
+        None => {}
     }
 
     let timeout = get_env_var("JWT_TIMEOUT").ok_or(JwtConfigError::MissingTimeout)?;
@@ -110,8 +142,9 @@ pub fn enforce_jwt_config() {
         return;
     }
     panic!(
-        "Invalid JWT configuration: {error}. Set a random JWT_SECRET of at least \
-         {MIN_JWT_SECRET_LEN} bytes (or {ALLOW_WEAK_SECRET_ENV}=true on a dev/test stack only) \
-         and a positive JWT_TIMEOUT."
+        "Invalid JWT configuration: {error}. Set JWT_PUBLIC_KEY to Core's Ed25519 public key(s) \
+         (and JWT_PRIVATE_KEY on Core only), or during the transition a random JWT_SECRET of at \
+         least {MIN_JWT_SECRET_LEN} bytes ({ALLOW_WEAK_SECRET_ENV}=true tolerates test keys and \
+         secrets on a dev/test stack only), and a positive JWT_TIMEOUT."
     );
 }

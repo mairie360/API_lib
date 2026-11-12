@@ -1,18 +1,36 @@
 use super::check_jwt_validity::resolve_legacy_user;
 use super::error::JWTCheckError;
+use super::session_keys::session_public_keys;
 use crate::database::db_interface::id_from_sql;
 use crate::database::error::DbError;
 use crate::database::query_views::GetUserIdByEmailQueryView;
 use crate::error::ApiLibError;
 use crate::keycloak::KeycloakTokenVerifier;
 use crate::smart_db::SmartDatabase;
-use jsonwebtoken::{decode_header, AlgorithmFamily};
+use jsonwebtoken::{decode_header, Algorithm, AlgorithmFamily, Header};
+
+/// Whether a token with this header was signed by `Core_API`: a historical HMAC token, or an
+/// `EdDSA` token whose `kid` is one of the keys of `JWT_PUBLIC_KEY` (MAIR-680). Keycloak tokens are
+/// signed with the realm's keys, whose `kid` never matches.
+fn is_core_token(header: &Header) -> bool {
+    if header.alg.family() == AlgorithmFamily::Hmac {
+        return true;
+    }
+    header.alg == Algorithm::EdDSA
+        && header.kid.as_deref().is_some_and(|kid| {
+            session_public_keys()
+                .unwrap_or_default()
+                .iter()
+                .any(|key| key.kid() == kid)
+        })
+}
 
 /// Authenticates a bearer token of either kind and returns the `users.id` it designates.
 ///
 /// The kind is read from the token's `alg` header:
-/// - an HMAC algorithm means a historical JWT issued by `Core_API`: it is checked like
-///   [`super::check_jwt_validity`] (signature with `JWT_SECRET`, expiry, existing user);
+/// - an HMAC algorithm, or `EdDSA` with the `kid` of a key of `JWT_PUBLIC_KEY`, means a session
+///   JWT issued by `Core_API`: it is checked like [`super::check_jwt_validity`] (signature,
+///   `iss`/`aud` for `EdDSA`, expiry, revocation, existing user; see [`super::decode_jwt`]);
 /// - any other algorithm means a Keycloak access token: it is verified by `keycloak` (see
 ///   [`KeycloakTokenVerifier::verify`]) and its verified e-mail is matched, case-insensitively,
 ///   to exactly one active account (ambiguous matches are refused, see
@@ -46,7 +64,7 @@ pub async fn authenticate_token(
         tracing::warn!(error = ?err, "JWT header decode error");
         JWTCheckError::InvalidToken
     })?;
-    if header.alg.family() == AlgorithmFamily::Hmac {
+    if is_core_token(&header) {
         return resolve_legacy_user(jwt, db_interface).await;
     }
 

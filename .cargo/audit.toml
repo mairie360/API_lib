@@ -10,4 +10,9 @@ ignore = [
     # jsonwebtoken moves to elliptic-curve 0.14, and remove it at once if code starts signing
     # with (or otherwise using) an EC private key.
     "RUSTSEC-2026-0387",
+    # libsqlite3-sys 0.37 (C SQLite CVE-2026-119375, fixed in >= 0.39), MAIR-740. It is only listed in
+    # Cargo.lock through sqlx's weak `sqlx-sqlite?/...` features: `cargo tree -i libsqlite3-sys
+    # --target all --all-features` prints nothing, it is never compiled into the binary. sqlx 0.9
+    # pins 0.37. Drop it once sqlx moves to libsqlite3-sys >= 0.39.
+    "RUSTSEC-2026-0459"
 ]

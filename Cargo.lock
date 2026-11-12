@@ -21,16 +21,17 @@ dependencies = [
 
 [[package]]
 name = "actix-http"
-version = "3.20.0"
+version = "3.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d20a22850ea7fecad12c5f8cd97d246c3af1f04ef400033977c2f13425c45816"
+checksum = "3422032be73eeb15bafdb64086386385875b653eb418a80241d1f98473e86ea6"
 dependencies = [
  "actix-codec",
  "actix-service",
  "actix-utils",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bitflags 2.13.1",
  "brotli",
+ "brotli-decompressor",
  "bytes",
  "bytestring",
  "derive_more",
@@ -131,9 +132,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web"
-version = "4.16.0"
+version = "4.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "824c7250d7e468feb7903e41efc5d6883cb1f3957e8db2c3d2402a9ff430b886"
+checksum = "acd6966acfcc7b66b37bdeea7d11665d5accac89333767e1784d2cecd33984e7"
 dependencies = [
  "actix-codec",
  "actix-http",
@@ -175,9 +176,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web-codegen"
-version = "4.4.0"
+version = "4.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b96b09c4878563f8ab4a5fd0c59f9f0d6e0e9f60eb9b748526a0b9604fd89c50"
+checksum = "f7c9f4c52b954a73c76757a3952d3437fca00a2fbcb49704f8a6ea9f767e73f0"
 dependencies = [
  "actix-router",
  "proc-macro2",
@@ -1187,7 +1188,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3074,7 +3075,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3422,7 +3423,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3480,7 +3481,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4200,7 +4201,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4868,9 +4869,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.11"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5f280bbb2b287bc8e7de7e3852945a0ff50d1bbcb5ed42b6c7a568c546df171"
+checksum = "7265c9301c16a8711c992c2d8da90ee77ef54b1ed51482d6dfeb00dc756b1297"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -4910,7 +4911,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -111,10 +111,10 @@ impl SmartDatabase {
     where
         Q: ApiRequestDto,
     {
-        // 1. On exécute la modification en base (INSERT, UPDATE ou DELETE) -> Erreur critique remontée[cite: 1]
+        // 1. On exécute la modification en base (INSERT, UPDATE ou DELETE) -> Erreur critique remontée
         self.db.execute(&query).await?;
 
-        // 2. Si la vue déclare une clé de cache, on l'invalide (échec Redis ignoré pour l'utilisateur)[cite: 1]
+        // 2. Si la vue déclare une clé de cache, on l'invalide (échec Redis ignoré pour l'utilisateur)
         if let Some(ref key) = query.cache_key() {
             let _ = self.redis.secure_delete(key).await;
         }
@@ -136,21 +136,21 @@ impl SmartDatabase {
         let cache_key = query.cache_key();
         let cache_ttl = query.cache_ttl();
 
-        // 1. Si la vue a une clé de cache, on interroge Redis (silencieux en cas d'échec)[cite: 1]
+        // 1. Si la vue a une clé de cache, on interroge Redis (silencieux en cas d'échec)
         if let Some(ref key) = cache_key {
             if let Ok(Some(json_str)) = self.redis.secure_get::<String>(key).await {
                 if let Ok(value) = serde_json::from_str::<T>(&json_str) {
-                    return Ok(value); // Cache Hit ![cite: 1]
+                    return Ok(value); // Cache Hit !
                 }
             }
         }
 
-        // 2. Sinon, on tape dans PostgreSQL -> Les erreurs de DB remontent à l'API[cite: 1]
+        // 2. Sinon, on tape dans PostgreSQL -> Les erreurs de DB remontent à l'API
         let value: T = self.db.fetch_one(query).await?;
         self.invalidate_read_caches(query.invalidated_read_caches())
             .await;
 
-        // 3. On remplit le cache et on applique le TTL si défini (non-bloquant)[cite: 1]
+        // 3. On remplit le cache et on applique le TTL si défini (non-bloquant)
         if let Some(ref key) = cache_key {
             if let Ok(json_str) = serde_json::to_string(&value) {
                 self.populate_cache(key, json_str, cache_ttl).await;
@@ -172,21 +172,21 @@ impl SmartDatabase {
         let cache_key = query.cache_key();
         let cache_ttl = query.cache_ttl();
 
-        // 1. Si la vue déclare une clé de cache, on tente de récupérer la liste (silencieux si Redis échoue)[cite: 1]
+        // 1. Si la vue déclare une clé de cache, on tente de récupérer la liste (silencieux si Redis échoue)
         if let Some(ref key) = cache_key {
             if let Ok(Some(json_str)) = self.redis.secure_get::<String>(key).await {
                 if let Ok(values) = serde_json::from_str::<Vec<T>>(&json_str) {
-                    return Ok(values); // Cache Hit ![cite: 1]
+                    return Ok(values); // Cache Hit !
                 }
             }
         }
 
-        // 2. Cache Miss : on interroge PostgreSQL -> Erreur remontée[cite: 1]
+        // 2. Cache Miss : on interroge PostgreSQL -> Erreur remontée
         let values: Vec<T> = self.db.fetch_all(query).await?;
         self.invalidate_read_caches(query.invalidated_read_caches())
             .await;
 
-        // 3. Stockage dans Redis + application du TTL si défini (non-bloquant)[cite: 1]
+        // 3. Stockage dans Redis + application du TTL si défini (non-bloquant)
         if let Some(ref key) = cache_key {
             if let Ok(json_str) = serde_json::to_string(&values) {
                 self.populate_cache(key, json_str, cache_ttl).await;
@@ -202,28 +202,28 @@ impl SmartDatabase {
     /// ignorées : le cache n'est qu'une optimisation.
     pub async fn fetch_scalar<T, Q>(&self, query: &Q) -> Result<T, ApiLibError>
     where
-        // Contraintes SQL existantes[cite: 1]
+        // Contraintes SQL existantes
         T: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send + Unpin,
-        // Contraintes Redis pour lire et écrire le scalaire directement[cite: 1]
+        // Contraintes Redis pour lire et écrire le scalaire directement
         T: FromRedisValue + ToSingleRedisArg + Send + Sync + std::marker::Copy,
         Q: ApiRequestDto,
     {
         let cache_key = query.cache_key();
         let cache_ttl = query.cache_ttl();
 
-        // 1. Si la vue déclare une clé de cache, on tente de récupérer le scalaire (silencieux)[cite: 1]
+        // 1. Si la vue déclare une clé de cache, on tente de récupérer le scalaire (silencieux)
         if let Some(ref key) = cache_key {
             if let Ok(Some(value)) = self.redis.secure_get::<T>(key).await {
-                return Ok(value); // Cache Hit ![cite: 1]
+                return Ok(value); // Cache Hit !
             }
         }
 
-        // 2. Cache Miss : on interroge PostgreSQL -> Erreur remontée[cite: 1]
+        // 2. Cache Miss : on interroge PostgreSQL -> Erreur remontée
         let value: T = self.db.fetch_scalar(query).await?;
         self.invalidate_read_caches(query.invalidated_read_caches())
             .await;
 
-        // 3. Stockage dans Redis + application du TTL si défini (non-bloquant)[cite: 1]
+        // 3. Stockage dans Redis + application du TTL si défini (non-bloquant)
         if let Some(ref key) = cache_key {
             self.populate_cache(key, value, cache_ttl).await;
         }

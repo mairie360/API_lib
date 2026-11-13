@@ -193,8 +193,7 @@ impl KeycloakTokenVerifier {
                     email: email.trim().to_string(),
                     roles: claims
                         .realm_access
-                        .map(|access| access.roles)
-                        .unwrap_or_default(),
+                        .map_or_else(Vec::new, |access| access.roles),
                 })
             }
             _ => Err(KeycloakError::EmailNotVerified),

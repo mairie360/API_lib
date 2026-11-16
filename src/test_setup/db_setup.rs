@@ -9,9 +9,10 @@ use tokio_postgres::NoTls;
 /// images used by the tests. The consumer services can override it with the `TEST_DB_VERSION`
 /// environment variable (to test against another version than the lib's default).
 ///
-/// Pinned to the latest published `dev-<sha>` image: the `compliance_api` role and the grants
-/// the API roles need for the middlewares (MAIR-556) are not in any tagged release yet.
-const DEFAULT_DB_VERSION: &str = "dev-949384c";
+/// Pinned to the Database release every API pins in its `.cargo/config.toml` and compose files
+/// (MAIR-243), so the cargo tests and the compose stacks exercise the same schema. It contains the
+/// `compliance_api` role and the grants the API roles need for the middlewares (MAIR-556).
+const DEFAULT_DB_VERSION: &str = "3.4.0";
 
 /// Port interne du conteneur Postgres, publié sur un port hôte aléatoire.
 const POSTGRES_PORT: u16 = 5432;
@@ -181,4 +182,18 @@ pub fn set_db_env_vars(config: &TestDbConfig, db_name: &str, user: &str, pass: &
     env::set_var("DB_NAME", db_name);
     env::set_var("DB_USER", user);
     env::set_var("DB_PASSWORD", pass);
+}
+
+#[cfg(test)]
+mod mair_243_tests {
+    use super::DEFAULT_DB_VERSION;
+
+    /// MAIR-243: the default must be a released Database version (`X.Y.Z`), the one the APIs pin,
+    /// not a `dev-<sha>` build that drifts from their compose stacks.
+    #[test]
+    fn default_db_version_is_a_release() {
+        let parts: Vec<&str> = DEFAULT_DB_VERSION.split('.').collect();
+        assert_eq!(parts.len(), 3, "`{DEFAULT_DB_VERSION}` must be X.Y.Z");
+        assert!(parts.iter().all(|p| p.parse::<u64>().is_ok()));
+    }
 }

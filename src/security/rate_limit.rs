@@ -5,7 +5,7 @@ use std::sync::Arc;
 use actix_web::{
     body::BoxBody,
     dev::{ServiceRequest, ServiceResponse},
-    http::header::RETRY_AFTER,
+    http::header::{ContentType, RETRY_AFTER},
     middleware::Next,
     Error, HttpMessage, HttpResponse,
 };
@@ -179,6 +179,7 @@ pub async fn rate_limit_middleware(
             tracing::warn!(key = ?key, retry_after, "rate limit exceeded");
             let response = HttpResponse::TooManyRequests()
                 .insert_header((RETRY_AFTER, retry_after.to_string()))
+                .content_type(ContentType::plaintext())
                 .body("Too many requests, retry later");
             Ok(req.into_response(response))
         }

@@ -1,6 +1,9 @@
 use std::fmt;
 
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    HttpResponse, ResponseError,
+};
 
 /// Why a request value was rejected; its text is the body of the `400` response.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +31,8 @@ impl ResponseError for ValidationError {
     }
 
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::BadRequest().body(self.0.clone())
+        HttpResponse::BadRequest()
+            .content_type(ContentType::plaintext())
+            .body(self.0.clone())
     }
 }

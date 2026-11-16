@@ -1,4 +1,7 @@
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    HttpResponse, ResponseError,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -16,6 +19,8 @@ impl ResponseError for PasswordError {
 
     fn error_response(&self) -> HttpResponse {
         tracing::error!("Password hashing failure: {self}");
-        HttpResponse::InternalServerError().body(self.to_string())
+        HttpResponse::InternalServerError()
+            .content_type(ContentType::plaintext())
+            .body(self.to_string())
     }
 }

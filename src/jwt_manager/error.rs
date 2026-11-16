@@ -1,7 +1,10 @@
 // Fichier : src/jwt_manager/error.rs
 
 use crate::keycloak::KeycloakError;
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    HttpResponse, ResponseError,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -88,6 +91,8 @@ impl ResponseError for JWTCheckError {
         }
 
         // --- HTTP response ---
-        HttpResponse::build(self.status_code()).body(self.to_string())
+        HttpResponse::build(self.status_code())
+            .content_type(ContentType::plaintext())
+            .body(self.to_string())
     }
 }

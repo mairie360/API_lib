@@ -1,7 +1,10 @@
 use std::fmt;
 use std::sync::LazyLock;
 
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    http::{header::ContentType, StatusCode},
+    HttpResponse, ResponseError,
+};
 use regex::Regex;
 use thiserror::Error;
 
@@ -170,10 +173,12 @@ impl ResponseError for ApiLibError {
             Self::Jwt(err) => err.error_response(),
             Self::Keycloak(err) => err.error_response(),
             Self::Password(err) => err.error_response(),
-            Self::Email(_) => HttpResponse::InternalServerError().body("Failed to send the e-mail"),
-            Self::Serialization(err) => {
-                HttpResponse::BadRequest().body(format!("Invalid JSON: {err}"))
-            }
+            Self::Email(_) => HttpResponse::InternalServerError()
+                .content_type(ContentType::plaintext())
+                .body("Failed to send the e-mail"),
+            Self::Serialization(err) => HttpResponse::BadRequest()
+                .content_type(ContentType::plaintext())
+                .body(format!("Invalid JSON: {err}")),
         }
     }
 }

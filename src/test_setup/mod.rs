@@ -1,5 +1,7 @@
+mod cleanup;
 pub mod db_setup;
 pub mod http_setup;
+pub mod isolated;
 pub mod keycloak_setup;
 pub mod queries_setup;
 pub mod redis_setup;

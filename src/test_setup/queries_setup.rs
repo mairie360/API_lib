@@ -1,9 +1,10 @@
+use super::cleanup::remove_at_exit;
 use super::db_setup::{start_postgres_container, API_ROLES, TEST_API_ROLE_PASSWORD};
+use super::isolated::create_database;
 use crate::password::hash_password;
 use futures_util::FutureExt;
 use std::env;
 use std::panic::AssertUnwindSafe;
-use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use testcontainers::{ContainerAsync, GenericImage};
 use tokio::sync::OnceCell;
@@ -217,36 +218,13 @@ pub async fn setup_access_control_data(client: &Client) {
         .expect("Failed to setup access control data");
 }
 
+/// Database holding a pristine copy of the seeded data, the template of every [`isolated_db`](super::isolated::isolated_db).
+pub(super) const SEED_TEMPLATE: &str = "mairie360_seed_template";
+
 /// Outcome of the one-time setup, failure included: a `OnceCell` whose initialiser panics stays
 /// empty, so every later test would start a new container and fail the same way again.
 static SHARED_DB: OnceCell<Result<(ContainerAsync<GenericImage>, String), String>> =
     OnceCell::const_new();
-
-/// Identifiant du conteneur de `SHARED_DB`, supprimé à la sortie du processus.
-static SHARED_DB_CONTAINER_ID: OnceLock<String> = OnceLock::new();
-
-/// Supprime le conteneur partagé : une `static` n'est jamais droppée, testcontainers ne le fait donc
-/// pas lui-même, et le conteneur survivrait au binaire de test.
-extern "C" fn remove_shared_db_container() {
-    if let Some(id) = SHARED_DB_CONTAINER_ID.get() {
-        let _ = Command::new("docker")
-            .args(["rm", "--force", "--volumes", id])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
-}
-
-fn remove_shared_db_container_at_exit(id: &str) {
-    if SHARED_DB_CONTAINER_ID.set(id.to_owned()).is_ok() {
-        // SAFETY: `remove_shared_db_container` est une fonction `extern "C"` sans argument qui ne
-        // panique pas ; `atexit` ne fait que l'enregistrer.
-        // nosemgrep: rust.lang.security.unsafe-usage.unsafe-usage -- test-only helper, see SAFETY above
-        if unsafe { libc::atexit(remove_shared_db_container) } != 0 {
-            eprintln!("⚠️ Impossible d'enregistrer la suppression du conteneur de test {id}");
-        }
-    }
-}
 
 // async fn setup_tests_full() -> (ContainerAsync<GenericImage>, String) {
 //     let (node, client, url) = setup_test_container().await;
@@ -316,7 +294,7 @@ pub async fn get_shared_db_as(role: &str) -> String {
 
 /// `superuser_url` (`postgres://postgres:postgres@<host>:<port>/<db>`) with `role`'s
 /// credentials.
-fn role_url(superuser_url: &str, role: &str) -> String {
+pub(super) fn role_url(superuser_url: &str, role: &str) -> String {
     let address = superuser_url
         .strip_prefix("postgres://postgres:postgres@")
         .expect("the shared test database URL is built by setup_test_container");
@@ -326,7 +304,7 @@ fn role_url(superuser_url: &str, role: &str) -> String {
 async fn init_shared_db() -> (ContainerAsync<GenericImage>, String) {
     // 1. Démarre le conteneur et le client
     let (node, client, url) = setup_test_container().await;
-    remove_shared_db_container_at_exit(node.id());
+    remove_at_exit(node.id());
 
     // 2. Nettoie les données existantes (sans supprimer les tables)
     client
@@ -349,6 +327,16 @@ async fn init_shared_db() -> (ContainerAsync<GenericImage>, String) {
     setup_expired_session(&client).await;
     setup_archived_user_test(&client).await;
     setup_access_control_data(&client).await;
+
+    // The copies of the isolated databases start from this pristine state. Postgres refuses to copy
+    // a database that has sessions: close the fixtures' one first (`create_database` retries while
+    // the server notices it).
+    drop(client);
+    let server = url
+        .rsplit_once('/')
+        .expect("the shared test database URL ends with its database name")
+        .0;
+    create_database(server, SEED_TEMPLATE, "postgres").await;
 
     println!("✅ Données de test injectées avec succès.");
     (node, url)

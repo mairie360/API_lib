@@ -55,6 +55,11 @@ pub struct Redis {
 struct RedisInner {
     redis_url: String,
     key_prefix: Option<String>,
+    /// Namespace put in front of the shared revocation keys. Always `None` in production, where
+    /// every API reads the same `revoked:<sid>`; the isolated clients of the tests set it
+    /// (`test_setup::redis_setup::isolated_redis`) so that two tests never revoke each other's
+    /// sessions.
+    shared_key_namespace: Option<String>,
     pool: Mutex<Option<Pool>>,
 }
 
@@ -105,6 +110,7 @@ impl Redis {
                 key_prefix: key_prefix
                     .filter(|prefix| !prefix.is_empty())
                     .map(str::to_string),
+                shared_key_namespace: None,
                 pool: Mutex::new(redis_pool),
             }),
         }
@@ -225,6 +231,23 @@ impl Redis {
 
     // --- Shared, unprefixed keys: crate-private, for the revocation list only ---
 
+    /// Client whose shared revocation keys live under `namespace` (tests only: see
+    /// [`RedisInner::shared_key_namespace`]), on top of the key prefix `namespace`.
+    pub(crate) fn with_isolated_shared_keys(redis_url: &str, namespace: &str) -> Self {
+        let mut client = Self::with_key_prefix(redis_url, Some(namespace));
+        if let Some(inner) = Arc::get_mut(&mut client.inner) {
+            inner.shared_key_namespace = Some(namespace.to_string());
+        }
+        client
+    }
+
+    fn shared_key(&self, shared_key: &str) -> String {
+        self.inner.shared_key_namespace.as_ref().map_or_else(
+            || shared_key.to_string(),
+            |namespace| format!("{namespace}:{shared_key}"),
+        )
+    }
+
     /// `SET key value EX seconds` on a key **not** prefixed with the role.
     pub(crate) async fn set_ex_shared<V>(
         &self,
@@ -235,14 +258,14 @@ impl Redis {
     where
         V: ToSingleRedisArg + Send + Sync,
     {
-        self.raw_set_ex(shared_key, value, seconds, false)
+        self.raw_set_ex(&self.shared_key(shared_key), value, seconds, false)
             .await
             .map(|_| ())
     }
 
     /// `EXISTS key` on a key **not** prefixed with the role.
     pub(crate) async fn exists_shared(&self, shared_key: &str) -> Result<bool, RedisError> {
-        self.raw_exists(shared_key).await
+        self.raw_exists(&self.shared_key(shared_key)).await
     }
 
     // --- Public API: every key is prefixed with the role ---

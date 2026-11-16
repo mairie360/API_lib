@@ -1,10 +1,16 @@
+use super::cleanup::remove_at_exit;
+use crate::redis::redis_interface::Redis;
+use futures_util::FutureExt;
 use redis::Client;
 use std::env;
+use std::panic::AssertUnwindSafe;
+use std::sync::atomic::{AtomicU32, Ordering};
 use testcontainers::core::{ContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use testcontainers::GenericImage;
 use testcontainers::ImageExt;
+use tokio::sync::OnceCell;
 
 pub struct RedisTestConfig {
     pub url: String,
@@ -109,4 +115,71 @@ impl RedisTestConfig {
             self.host, self.port
         )
     }
+}
+
+/// Outcome of the one-time start of the shared Redis, failure included (same reason as the shared
+/// database: a `OnceCell` whose initialiser panics stays empty).
+static SHARED_REDIS: OnceCell<Result<(ContainerAsync<GenericImage>, RedisTestConfig), String>> =
+    OnceCell::const_new();
+
+/// Numbers the key prefixes of this process.
+static PREFIX_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// The Redis shared by the tests of the process, started on the first call and removed at exit.
+///
+/// One container instead of one per test: isolate the keys of a test with [`isolated_redis`] (or
+/// [`unique_redis_prefix`]), not with a container of its own.
+///
+/// # Panics
+///
+/// Panics if the container cannot be started, and on every later call too (nothing is retried).
+pub async fn get_shared_redis() -> &'static RedisTestConfig {
+    let outcome = SHARED_REDIS
+        .get_or_init(|| async {
+            AssertUnwindSafe(async {
+                let (node, config) = start_redis_container().await;
+                remove_at_exit(node.id());
+                (node, config)
+            })
+            .catch_unwind()
+            .await
+            .map_err(|payload| {
+                payload
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| payload.downcast_ref::<&str>().map(ToString::to_string))
+                    .unwrap_or_else(|| "unknown panic".to_owned())
+            })
+        })
+        .await;
+    match outcome {
+        Ok((_container, config)) => config,
+        Err(reason) => {
+            panic!("The shared Redis could not be started, nothing was retried: {reason}")
+        }
+    }
+}
+
+/// A key prefix no other call of this process returns (`t<pid>x<n>`, without the `:` separator
+/// [`Redis`] adds).
+#[must_use]
+pub fn unique_redis_prefix() -> String {
+    format!(
+        "t{}x{}",
+        std::process::id(),
+        PREFIX_COUNTER.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// A [`Redis`] client of the shared Redis whose keys all carry a prefix of its own.
+///
+/// Two tests never read each other's keys, without a container per test. The shared revocation keys
+/// (`revoke_session`, `is_session_revoked`) are isolated too: they live under the same prefix.
+///
+/// # Panics
+///
+/// Panics if the shared Redis cannot be started.
+pub async fn isolated_redis() -> Redis {
+    let config = get_shared_redis().await;
+    Redis::with_isolated_shared_keys(&config.url, &unique_redis_prefix())
 }

@@ -5,6 +5,7 @@
 
 use mairie360_api_lib::database::db_interface::Database;
 use mairie360_api_lib::database::query_views::{IsAdminQueryView, IsUserActiveByIdQueryView};
+use mairie360_api_lib::jwt_manager::{is_session_revoked, revoke_session};
 use mairie360_api_lib::test_setup::http_setup::SeededUser;
 use mairie360_api_lib::test_setup::isolated::{isolated_db, IsolatedDb};
 use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
@@ -201,6 +202,19 @@ async fn two_isolated_redis_clients_do_not_see_each_others_keys() {
             .as_deref(),
         Some("one")
     );
+}
+
+// CodeRabbit on MAIR-1002: the revocation keys bypass the client prefix in production (every API
+// reads the same `revoked:<sid>`), so the isolated clients namespace them too.
+#[tokio::test]
+async fn revoking_a_session_through_an_isolated_client_does_not_revoke_it_for_another() {
+    let first = isolated_redis().await;
+    let second = isolated_redis().await;
+
+    revoke_session(&first, "session-1", 60).await.unwrap();
+
+    assert!(is_session_revoked(&first, "session-1").await.unwrap());
+    assert!(!is_session_revoked(&second, "session-1").await.unwrap());
 }
 
 #[tokio::test]

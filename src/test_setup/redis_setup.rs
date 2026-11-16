@@ -171,13 +171,15 @@ pub fn unique_redis_prefix() -> String {
     )
 }
 
-/// A [`Redis`] client of the shared Redis whose keys all carry a prefix of its own: two tests never
-/// read each other's keys, without a container per test.
+/// A [`Redis`] client of the shared Redis whose keys all carry a prefix of its own.
+///
+/// Two tests never read each other's keys, without a container per test. The shared revocation keys
+/// (`revoke_session`, `is_session_revoked`) are isolated too: they live under the same prefix.
 ///
 /// # Panics
 ///
 /// Panics if the shared Redis cannot be started.
 pub async fn isolated_redis() -> Redis {
     let config = get_shared_redis().await;
-    Redis::with_key_prefix(&config.url, Some(&unique_redis_prefix()))
+    Redis::with_isolated_shared_keys(&config.url, &unique_redis_prefix())
 }

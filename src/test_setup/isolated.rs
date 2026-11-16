@@ -27,6 +27,10 @@ const CREATE_ATTEMPTS: u32 = 100;
 
 const RETRY_DELAY: Duration = Duration::from_millis(100);
 
+/// Upper bound of the drop of a test database, so an unresponsive server cannot block a test. Long on
+/// purpose: a loaded Postgres (the whole suite at once) can take several seconds to end the sessions.
+const CLEANUP_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Numbers the databases of this process (the container is per process, so it is unique enough).
 static COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -114,15 +118,23 @@ impl Drop for IsolatedDb {
                 return;
             };
             runtime.block_on(async move {
-                let Ok((client, connection)) =
-                    tokio_postgres::connect(&format!("{server_url}/template1"), NoTls).await
-                else {
-                    return;
+                let cleanup = async {
+                    let Ok((client, connection)) =
+                        tokio_postgres::connect(&format!("{server_url}/template1"), NoTls).await
+                    else {
+                        return;
+                    };
+                    tokio::spawn(connection);
+                    let _ = client
+                        .batch_execute(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
+                        .await;
                 };
-                tokio::spawn(connection);
-                let _ = client
-                    .batch_execute(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
-                    .await;
+                if tokio::time::timeout(CLEANUP_TIMEOUT, cleanup)
+                    .await
+                    .is_err()
+                {
+                    eprintln!("timed out dropping test database {name}");
+                }
             });
         })
         .join();

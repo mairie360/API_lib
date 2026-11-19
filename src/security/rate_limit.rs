@@ -182,8 +182,10 @@ fn last_forwarded_hop(req: &ServiceRequest) -> Option<IpAddr> {
     req.headers()
         .get_all("x-forwarded-for")
         .next_back()
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.rsplit(',').next())
+        // Split the raw bytes first: the client-written hops on the left may be opaque bytes that
+        // are not text, and must not hide the valid hop on the right.
+        .and_then(|value| value.as_bytes().rsplit(|byte| *byte == b',').next())
+        .and_then(|hop| std::str::from_utf8(hop).ok())
         .and_then(|hop| parse_address(hop.trim()))
 }
 

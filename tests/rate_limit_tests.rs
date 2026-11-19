@@ -293,3 +293,31 @@ async fn mair_688_an_unreadable_rate_keeps_the_limiter_on_with_the_default() {
         StatusCode::TOO_MANY_REQUESTS
     );
 }
+
+#[actix_web::test]
+async fn mair_688_opaque_bytes_before_the_last_hop_do_not_hide_it() {
+    let app = app!(RateLimiter::new(config(1, true)));
+    let request = |prefix: &[u8], peer: &str| {
+        let mut value = prefix.to_vec();
+        value.extend_from_slice(b", 1.1.1.1");
+        from_peer(peer)
+            .insert_header((
+                "X-Forwarded-For",
+                actix_web::http::header::HeaderValue::from_bytes(&value).unwrap(),
+            ))
+            .to_request()
+    };
+    assert_eq!(
+        actix_test::call_service(&app, request(b"\x80", "10.0.0.1"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    // Another peer and another opaque prefix, same address seen by the proxy: same caller.
+    assert_eq!(
+        actix_test::call_service(&app, request(b"\xff\xfe", "10.0.0.2"))
+            .await
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}

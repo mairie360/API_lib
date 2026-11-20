@@ -59,7 +59,6 @@ mod tests {
             "/api/v1/auth/forgot_password",
             "/api/v1/auth/reset_password",
             "/api/v1/auth/force_change_password",
-            "/api/v1/auth/keycloak",
         ] {
             assert!(is_public_path(path), "{path} should be public");
         }

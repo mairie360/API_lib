@@ -4,11 +4,10 @@ ignore = [
     "RUSTSEC-2026-0258",
     # crypto-bigint 0.5 (timing variability of operations meant to be constant-time; fixed in
     # 0.7.6, which elliptic-curve 0.13 cannot use). Pulled by jsonwebtoken 11.1 (the latest
-    # release) through p256/p384, so only ES256/ES384 signature verification reaches it; other
-    # algorithms (HMAC, RSA, EdDSA) do not. This crate runs that verification with the
-    # Keycloak realm's public keys only: no secret goes through these operations. Drop it once
-    # jsonwebtoken moves to elliptic-curve 0.14, and remove it at once if code starts signing
-    # with (or otherwise using) an EC private key.
+    # release) through p256/p384, so only ES256/ES384 operations reach it; this crate only signs
+    # and verifies HMAC and EdDSA tokens (any other algorithm is refused before verification),
+    # so the code is never run. Drop it once jsonwebtoken moves to elliptic-curve 0.14, and
+    # remove it at once if code starts using an EC key.
     "RUSTSEC-2026-0387",
     # libsqlite3-sys 0.37 (C SQLite CVE-2026-119375, fixed in >= 0.39), MAIR-740. It is only listed in
     # Cargo.lock through sqlx's weak `sqlx-sqlite?/...` features: `cargo tree -i libsqlite3-sys

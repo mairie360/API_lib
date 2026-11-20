@@ -65,8 +65,7 @@ url = "2"
 
 [features]
 default = []
-# Test helpers for the APIs' own tests: `test_setup` (Postgres/Redis containers, seeded fixtures,
-# Keycloak mock) and `email::mock_client`. Enable it in `[dev-dependencies]` only, never in
+# Test helpers for the APIs' own tests: `test_setup` (Postgres/Redis containers, seeded fixtures) and `email::mock_client`. Enable it in `[dev-dependencies]` only, never in
 # `[dependencies]`: it pulls testcontainers into the binary.
 # With `otel`, it also turns on `opentelemetry_sdk/testing` (`InMemorySpanExporter`).
 test-utils = ["dep:testcontainers", "dep:tokio-postgres", "dep:libc", "opentelemetry_sdk?/testing"]

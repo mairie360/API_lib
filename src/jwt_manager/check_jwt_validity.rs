@@ -8,8 +8,8 @@ use crate::smart_db::SmartDatabase;
 /// Checks that a JWT signed with `JWT_SECRET` is present, valid, not expired and designates an
 /// existing, non-archived account.
 ///
-/// Ne concerne que les jetons historiques émis par `Core_API` : pour accepter aussi les jetons
-/// Keycloak, utiliser [`super::authenticate_token`].
+/// Only concerns the historical tokens issued by `Core_API`: to accept the `EdDSA` session tokens as
+/// well, use [`super::authenticate_token`].
 ///
 /// # Errors
 ///

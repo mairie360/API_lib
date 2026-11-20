@@ -9,8 +9,8 @@ use regex::Regex;
 use thiserror::Error;
 
 use crate::{
-    database::error::DbError, jwt_manager::error::JWTCheckError, keycloak::KeycloakError,
-    password::error::PasswordError, redis::error::RedisError,
+    database::error::DbError, jwt_manager::error::JWTCheckError, password::error::PasswordError,
+    redis::error::RedisError,
 };
 
 /// Every error of the crate. Like its variants, its `Display` and `Debug` never contain a value
@@ -25,9 +25,6 @@ pub enum ApiLibError {
 
     #[error(transparent)]
     Jwt(#[from] JWTCheckError),
-
-    #[error(transparent)]
-    Keycloak(#[from] KeycloakError),
 
     #[error(transparent)]
     Password(#[from] PasswordError),
@@ -47,7 +44,6 @@ impl fmt::Debug for ApiLibError {
             Self::Database(e) => write!(f, "ApiLibError::Database({e:?})"),
             Self::Redis(e) => write!(f, "ApiLibError::Redis({e:?})"),
             Self::Jwt(e) => write!(f, "ApiLibError::Jwt({e:?})"),
-            Self::Keycloak(e) => write!(f, "ApiLibError::Keycloak({e:?})"),
             Self::Password(e) => write!(f, "ApiLibError::Password({e:?})"),
             Self::Email(e) => write!(f, "ApiLibError::Email({e})"),
             Self::Serialization(_) => write!(f, "ApiLibError::Serialization({self})"),
@@ -159,7 +155,6 @@ impl ResponseError for ApiLibError {
             Self::Database(err) => err.status_code(),
             Self::Redis(err) => err.status_code(),
             Self::Jwt(err) => err.status_code(),
-            Self::Keycloak(err) => err.status_code(),
             Self::Password(err) => err.status_code(),
             Self::Email(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Serialization(_) => StatusCode::BAD_REQUEST,
@@ -171,7 +166,6 @@ impl ResponseError for ApiLibError {
             Self::Database(err) => err.error_response(),
             Self::Redis(err) => err.error_response(),
             Self::Jwt(err) => err.error_response(),
-            Self::Keycloak(err) => err.error_response(),
             Self::Password(err) => err.error_response(),
             Self::Email(_) => HttpResponse::InternalServerError()
                 .content_type(ContentType::plaintext())

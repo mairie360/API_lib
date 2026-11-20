@@ -1,6 +1,5 @@
 // Fichier : src/jwt_manager/error.rs
 
-use crate::keycloak::KeycloakError;
 use actix_web::{
     http::{header::ContentType, StatusCode},
     HttpResponse, ResponseError,
@@ -25,23 +24,6 @@ pub enum JWTCheckError {
     /// The revocation list (Redis) could not be checked: the token is refused (fail closed).
     #[error("Token revocation check unavailable")]
     RevocationCheckUnavailable,
-    /// A Keycloak token whose e-mail is missing or not verified by the realm.
-    #[error("The Keycloak account has no verified e-mail address")]
-    EmailNotVerified,
-    /// The Keycloak realm keys could not be fetched to verify a token.
-    #[error("The identity provider is unavailable")]
-    IdentityProviderUnavailable,
-}
-
-impl From<KeycloakError> for JWTCheckError {
-    fn from(error: KeycloakError) -> Self {
-        match error {
-            KeycloakError::InvalidToken => Self::InvalidToken,
-            KeycloakError::ExpiredToken => Self::ExpiredToken,
-            KeycloakError::EmailNotVerified => Self::EmailNotVerified,
-            KeycloakError::Unavailable => Self::IdentityProviderUnavailable,
-        }
-    }
 }
 
 impl ResponseError for JWTCheckError {
@@ -51,9 +33,7 @@ impl ResponseError for JWTCheckError {
             | Self::ExpiredToken
             | Self::InvalidToken
             | Self::RevokedToken => StatusCode::UNAUTHORIZED,
-            Self::EmailNotVerified => StatusCode::FORBIDDEN,
             Self::UnknownUser => StatusCode::NOT_FOUND,
-            Self::IdentityProviderUnavailable => StatusCode::BAD_GATEWAY,
             Self::DatabaseError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::RevocationCheckUnavailable => StatusCode::SERVICE_UNAVAILABLE,
         }
@@ -66,19 +46,10 @@ impl ResponseError for JWTCheckError {
             // ExpiredToken: normal at the end of a session, no need to flood the error logs.
             // UnknownUser: valid token, but the user was deleted in the meantime.
             // RevokedToken: the user logged out or the session was revoked, expected.
-            // EmailNotVerified: Keycloak realm configuration, already traced during verification.
-            Self::NoTokenProvided
-            | Self::ExpiredToken
-            | Self::UnknownUser
-            | Self::RevokedToken
-            | Self::EmailNotVerified => {}
+            Self::NoTokenProvided | Self::ExpiredToken | Self::UnknownUser | Self::RevokedToken => {
+            }
             Self::InvalidToken => {
                 tracing::warn!("Access attempted with a forged or invalid JWT.");
-            }
-            Self::IdentityProviderUnavailable => {
-                tracing::error!(
-                    "Keycloak realm keys unreachable: the token could not be verified."
-                );
             }
             Self::DatabaseError => {
                 tracing::error!("Database failure while checking the token's user.");

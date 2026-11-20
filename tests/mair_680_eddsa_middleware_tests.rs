@@ -88,10 +88,7 @@ async fn mair_680_a_core_eddsa_token_authenticates() {
     let alice = SeededUser::Alice.id().await;
     let db = smart_db().await;
     let token = generate_session_jwt(&alice.to_string(), "Admin", None).unwrap();
-    assert_eq!(
-        authenticate_token(&token, &db, None).await.ok(),
-        Some(alice)
-    );
+    assert_eq!(authenticate_token(&token, &db).await.ok(), Some(alice));
 }
 
 #[tokio::test]
@@ -103,10 +100,7 @@ async fn mair_680_forged_and_legacy_tokens_are_refused() {
         ("signed with another key", forged_admin_token(alice)),
         ("HS256 with the old secret", legacy_admin_token(alice)),
     ] {
-        assert!(
-            authenticate_token(&token, &db, None).await.is_err(),
-            "{case}"
-        );
+        assert!(authenticate_token(&token, &db).await.is_err(), "{case}");
     }
 }
 

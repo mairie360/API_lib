@@ -32,7 +32,7 @@ use crate::state::AppState;
 pub const TEST_JWT_SECRET: &str = "test-only-jwt-secret-for-endpoint-tests";
 
 /// PKCS#8 DER of the Ed25519 private key of the test key pair (MAIR-680). Stored as DER, like the
-/// Keycloak test keys, so that the secret scanners do not read a PEM private key in the sources.
+/// the secret scanners do not read a PEM private key in the sources.
 const TEST_JWT_PRIVATE_KEY_DER: &[u8] = include_bytes!("fixtures/session_test_key.der");
 
 /// Ed25519 private key of the test key pair (MAIR-680, `JWT_PRIVATE_KEY`), as PEM.

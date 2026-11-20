@@ -9,7 +9,6 @@ use mairie360_api_lib::database::error::DbError;
 use mairie360_api_lib::database::InvalidId;
 use mairie360_api_lib::error::{log_error, ApiLibError, ErrorKind};
 use mairie360_api_lib::jwt_manager::error::JWTCheckError;
-use mairie360_api_lib::keycloak::KeycloakError;
 use mairie360_api_lib::password::error::PasswordError;
 use mairie360_api_lib::redis::error::RedisError;
 use mairie360_api_lib::validation::ValidationError;
@@ -100,17 +99,6 @@ fn every_error_answers_text_plain() {
             JWTCheckError::UnknownUser,
             JWTCheckError::RevokedToken,
             JWTCheckError::RevocationCheckUnavailable,
-            JWTCheckError::EmailNotVerified,
-            JWTCheckError::IdentityProviderUnavailable,
-        ]
-        .map(|error| Box::new(error) as Box<dyn ResponseError>),
-    );
-    errors.extend(
-        [
-            KeycloakError::InvalidToken,
-            KeycloakError::ExpiredToken,
-            KeycloakError::EmailNotVerified,
-            KeycloakError::Unavailable,
         ]
         .map(|error| Box::new(error) as Box<dyn ResponseError>),
     );

@@ -4,7 +4,14 @@ use std::env;
 
 static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
     // This code runs ONCE before any test
-    env::set_var("JWT_SECRET", "b\"secret\"");
+    env::set_var(
+        "JWT_PUBLIC_KEY",
+        mairie360_api_lib::test_setup::http_setup::TEST_JWT_PUBLIC_KEY,
+    );
+    env::set_var(
+        "JWT_PRIVATE_KEY",
+        mairie360_api_lib::test_setup::http_setup::test_jwt_private_key(),
+    );
     env::set_var("JWT_TIMEOUT", "3600");
     println!("Global setup done");
 });

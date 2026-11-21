@@ -18,9 +18,6 @@ pub use get_jwt_from_request::get_jwt_from_request;
 mod get_role;
 pub use get_role::get_role_from_jwt;
 
-mod get_jwt_secret;
-pub use get_jwt_secret::get_jwt_secret;
-
 mod get_jwt_timeout;
 pub use get_jwt_timeout::get_jwt_timeout;
 
@@ -36,7 +33,7 @@ pub use jwt_claims::Claims;
 mod validate_jwt_config;
 pub use validate_jwt_config::{
     enforce_jwt_config, is_session_required, validate_jwt_config, JwtConfigError,
-    ALLOW_WEAK_SECRET_ENV, MIN_JWT_SECRET_LEN, REQUIRE_SESSION_ENV,
+    ALLOW_WEAK_SECRET_ENV, REQUIRE_SESSION_ENV,
 };
 
 mod session_keys;

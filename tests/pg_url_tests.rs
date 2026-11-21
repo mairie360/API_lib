@@ -63,7 +63,14 @@ async fn app_state_from_env_connects_with_the_db_variables() {
 
     let (_db, shared_url) = get_shared_db().await;
     let parsed = Url::parse(shared_url).unwrap();
-    std::env::set_var("JWT_SECRET", "test-only-pg-url-secret-0123456789abcdef");
+    std::env::set_var(
+        "JWT_PUBLIC_KEY",
+        mairie360_api_lib::test_setup::http_setup::TEST_JWT_PUBLIC_KEY,
+    );
+    std::env::set_var(
+        "JWT_PRIVATE_KEY",
+        mairie360_api_lib::test_setup::http_setup::test_jwt_private_key(),
+    );
     std::env::set_var("JWT_TIMEOUT", "3600");
     std::env::set_var("REDIS_URL", "redis://127.0.0.1:1");
     std::env::set_var("DB_USER", decode(parsed.username()));

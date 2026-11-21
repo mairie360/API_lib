@@ -1,9 +1,8 @@
-use super::get_jwt_secret::get_jwt_secret;
 use super::get_jwt_timeout::get_jwt_timeout;
 use super::jwt_claims::Claims;
 use super::session_keys::{session_signing_key, SESSION_JWT_AUDIENCE, SESSION_JWT_ISSUER};
 use jsonwebtoken::errors::{Error, ErrorKind};
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use jsonwebtoken::{encode, Algorithm, Header};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Signs a JWT for `user_id_str` with the role `role`, valid for `JWT_TIMEOUT` seconds.
@@ -23,15 +22,14 @@ pub fn generate_jwt(user_id_str: &str, role: &str) -> Result<String, Error> {
 /// A token with a `sid` is refused by every middleware of this crate once `revoked:<sid>`
 /// exists in Redis (see [`revoke_session`](super::revoke_session)).
 ///
-/// When `JWT_PRIVATE_KEY` is set (only on `Core_API`, MAIR-680), the token is signed with that
-/// Ed25519 key (`alg` `EdDSA`, `kid` = thumbprint of its public key) and carries `iss` and `aud`.
-/// Otherwise it is a historical HS256 token signed with `JWT_SECRET` (transition).
+/// The token is signed with the Ed25519 key of `JWT_PRIVATE_KEY` (`alg` `EdDSA`, `kid` =
+/// thumbprint of its public key) and carries `iss` and `aud`. Only `Core_API` holds that key.
 ///
 /// # Errors
 ///
 /// Returns a `jsonwebtoken` error when `JWT_TIMEOUT` is missing or invalid, when
-/// `JWT_PRIVATE_KEY` is invalid or not published in `JWT_PUBLIC_KEY`, when neither it nor
-/// `JWT_SECRET` is set, or when encoding fails.
+/// `JWT_PRIVATE_KEY` is not set (`MissingRequiredClaim`), invalid or not published in
+/// `JWT_PUBLIC_KEY`, or when encoding fails.
 pub fn generate_session_jwt(
     user_id_str: &str,
     role: &str,
@@ -51,19 +49,15 @@ pub fn generate_session_jwt(
         claims = claims.with_session_id(session_id);
     }
 
-    if let Some(signing_key) =
-        session_signing_key().map_err(|_| Error::from(ErrorKind::InvalidEddsaKey))?
-    {
-        let claims = claims.with_issuer_and_audience(SESSION_JWT_ISSUER, SESSION_JWT_AUDIENCE);
-        let mut header = Header::new(Algorithm::EdDSA);
-        header.kid = Some(signing_key.kid().to_string());
-        return encode(&header, &claims, signing_key.encoding_key());
-    }
-
-    let secret: Vec<u8> = get_jwt_secret()?;
-    encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(&secret),
-    )
+    let signing_key = session_signing_key()
+        .map_err(|_| Error::from(ErrorKind::InvalidEddsaKey))?
+        .ok_or_else(|| {
+            Error::from(ErrorKind::MissingRequiredClaim(
+                "JWT_PRIVATE_KEY is not set: only Core_API signs session tokens".to_string(),
+            ))
+        })?;
+    let claims = claims.with_issuer_and_audience(SESSION_JWT_ISSUER, SESSION_JWT_AUDIENCE);
+    let mut header = Header::new(Algorithm::EdDSA);
+    header.kid = Some(signing_key.kid().to_string());
+    encode(&header, &claims, signing_key.encoding_key())
 }

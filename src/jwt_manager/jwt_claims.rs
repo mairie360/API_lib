@@ -10,12 +10,12 @@ pub struct Claims {
     /// session: they are still accepted, but cannot be revoked before they expire.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sid: Option<String>,
-    /// Issuer, [`SESSION_JWT_ISSUER`](super::SESSION_JWT_ISSUER) on the tokens Core signs with
-    /// its Ed25519 key (MAIR-680); absent from the historical `JWT_SECRET` tokens.
+    /// Issuer, [`SESSION_JWT_ISSUER`](super::SESSION_JWT_ISSUER) on every token Core signs;
+    /// optional so that [`Claims::new`] can build the claims before signing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     iss: Option<String>,
-    /// Audience, [`SESSION_JWT_AUDIENCE`](super::SESSION_JWT_AUDIENCE) on the tokens Core signs
-    /// with its Ed25519 key (MAIR-680); absent from the historical `JWT_SECRET` tokens.
+    /// Audience, [`SESSION_JWT_AUDIENCE`](super::SESSION_JWT_AUDIENCE) on every token Core
+    /// signs; optional so that [`Claims::new`] can build the claims before signing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     aud: Option<String>,
 }

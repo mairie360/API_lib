@@ -17,7 +17,14 @@ const UNREACHABLE_PG: &str = "postgres://user:password@127.0.0.1:1/db";
 const UNREACHABLE_REDIS: &str = "redis://127.0.0.1:1";
 
 static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
-    std::env::set_var("JWT_SECRET", "test-only-readiness-secret-0123456789");
+    std::env::set_var(
+        "JWT_PUBLIC_KEY",
+        mairie360_api_lib::test_setup::http_setup::TEST_JWT_PUBLIC_KEY,
+    );
+    std::env::set_var(
+        "JWT_PRIVATE_KEY",
+        mairie360_api_lib::test_setup::http_setup::test_jwt_private_key(),
+    );
     std::env::set_var("JWT_TIMEOUT", "3600");
     std::env::set_var(DB_CONNECT_TIMEOUT_ENV, "1");
 });

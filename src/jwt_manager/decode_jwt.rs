@@ -1,19 +1,16 @@
-use super::get_jwt_secret::get_jwt_secret;
 use super::jwt_claims::Claims;
 use super::session_keys::{session_public_keys, SESSION_JWT_AUDIENCE, SESSION_JWT_ISSUER};
 use jsonwebtoken::errors::{Error, ErrorKind};
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, decode_header, Algorithm, Validation};
 
 /// Decodes and validates a session JWT issued by `Core_API` (signature and expiry, no leeway).
 ///
-/// Two kinds of tokens are accepted, picked from the `alg` header (MAIR-680):
-/// - `EdDSA`: signed with Core's Ed25519 key. The key is the one of `JWT_PUBLIC_KEY` whose
-///   thumbprint is the `kid` header; `iss` must be [`SESSION_JWT_ISSUER`](super::SESSION_JWT_ISSUER)
-///   and `aud` [`SESSION_JWT_AUDIENCE`](super::SESSION_JWT_AUDIENCE).
-/// - `HS256`: the historical tokens signed with `JWT_SECRET`, accepted only while `JWT_SECRET`
-///   is set (transition). Once the secret is removed from a service, they are refused.
-///
-/// Any other algorithm is refused.
+/// Only `EdDSA` tokens signed with Core's Ed25519 key are accepted: the key is the one of
+/// `JWT_PUBLIC_KEY` whose thumbprint is the `kid` header, `iss` must be
+/// [`SESSION_JWT_ISSUER`](super::SESSION_JWT_ISSUER) and `aud`
+/// [`SESSION_JWT_AUDIENCE`](super::SESSION_JWT_AUDIENCE). Any other algorithm is refused, the
+/// HMAC ones included: no service holds a shared secret any more, so an HS256 token can only be
+/// forged.
 ///
 /// # Errors
 ///
@@ -37,16 +34,6 @@ pub fn decode_jwt(token: &str) -> Result<Claims, Error> {
             validation.set_audience(&[SESSION_JWT_AUDIENCE]);
             validation.set_required_spec_claims(&["exp", "sub", "iss", "aud"]);
             Ok(decode::<Claims>(token, key.decoding_key(), &validation)?.claims)
-        }
-        Algorithm::HS256 => {
-            let secret: Vec<u8> =
-                get_jwt_secret().map_err(|_| Error::from(ErrorKind::InvalidKeyFormat))?;
-            let mut validation = Validation::new(Algorithm::HS256);
-            validation.leeway = 0;
-            // Historical tokens carry no audience. Checking `iss`/`aud` on them would protect
-            // nothing: whoever holds `JWT_SECRET` can put any claim in them.
-            validation.validate_aud = false;
-            Ok(decode::<Claims>(token, &DecodingKey::from_secret(&secret), &validation)?.claims)
         }
         _ => Err(Error::from(ErrorKind::InvalidAlgorithm)),
     }

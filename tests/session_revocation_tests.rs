@@ -17,7 +17,14 @@ use redis::Commands;
 use serial_test::serial;
 
 static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
-    std::env::set_var("JWT_SECRET", "b\"secret\"");
+    std::env::set_var(
+        "JWT_PUBLIC_KEY",
+        mairie360_api_lib::test_setup::http_setup::TEST_JWT_PUBLIC_KEY,
+    );
+    std::env::set_var(
+        "JWT_PRIVATE_KEY",
+        mairie360_api_lib::test_setup::http_setup::test_jwt_private_key(),
+    );
     std::env::set_var("JWT_TIMEOUT", "3600");
 });
 

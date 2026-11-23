@@ -10,7 +10,9 @@ pub use decode_jwt::decode_jwt;
 pub mod error;
 
 mod generate_jwt;
-pub use generate_jwt::{generate_jwt, generate_session_jwt};
+pub use generate_jwt::{
+    generate_bound_session_jwt, generate_jwt, generate_session_jwt, SessionBinding,
+};
 
 mod get_jwt_from_request;
 pub use get_jwt_from_request::get_jwt_from_request;
@@ -31,7 +33,7 @@ mod get_user_id_from_jwt;
 pub use get_user_id_from_jwt::get_user_id_from_jwt;
 
 mod jwt_claims;
-pub use jwt_claims::Claims;
+pub use jwt_claims::{Claims, Confirmation};
 
 mod validate_jwt_config;
 pub use validate_jwt_config::{
@@ -49,4 +51,11 @@ pub use session_keys::{
 mod session_revocation;
 pub use session_revocation::{
     is_session_revoked, revoke_session, revoked_session_key, REVOKED_SESSION_KEY_PREFIX,
+};
+
+mod session_state;
+pub use session_state::{
+    cache_active_session, jwt_hash, mark_session_revoked, publish_session_state,
+    read_session_state, session_state_key, SessionState, SessionStatus,
+    MAX_SESSION_STATE_TTL_SECONDS, SESSION_STATE_KEY_PREFIX,
 };

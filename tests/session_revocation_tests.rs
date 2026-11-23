@@ -1,12 +1,15 @@
 //! MAIR-264: tokens bound to a revoked session are refused by the middlewares, through the
-//! shared Redis revocation list (`revoked:<sid>`).
+//! shared Redis revocation list (`revoked:<sid>`), and MAIR-772: the session state `session:<sid>`
+//! accepts the active token of a session and refuses the token a refresh replaced.
 //!
 //! Own test binary: `middlewares_tests` changes `JWT_TIMEOUT` while running.
 
 use actix_web::{http::StatusCode, test, web, App, HttpResponse};
 use mairie360_api_lib::jwt_manager::{
-    decode_jwt, generate_jwt, generate_session_jwt, is_session_revoked, revoke_session,
-    revoked_session_key, REVOKED_SESSION_KEY_PREFIX,
+    decode_jwt, generate_bound_session_jwt, generate_jwt, generate_session_jwt, is_session_revoked,
+    mark_session_revoked, publish_session_state, read_session_state, revoke_session,
+    revoked_session_key, session_state_key, SessionBinding, SessionState, SessionStatus,
+    REVOKED_SESSION_KEY_PREFIX,
 };
 use mairie360_api_lib::redis::redis_interface::Redis;
 use mairie360_api_lib::security::{AdminMiddleware, JwtMiddleware};
@@ -191,4 +194,157 @@ async fn session_token_fails_closed_when_redis_is_down() {
         status_of!(app, token, "/protected"),
         StatusCode::SERVICE_UNAVAILABLE
     );
+}
+
+macro_rules! protected_app {
+    ($app_state:expr) => {
+        test::init_service(
+            App::new()
+                .app_data($app_state.clone())
+                .wrap(JwtMiddleware)
+                .route("/protected", web::get().to(index)),
+        )
+        .await
+    };
+}
+
+#[tokio::test]
+#[serial]
+async fn mair_772_the_session_state_accepts_the_active_token_and_refuses_the_replaced_one() {
+    setup();
+    let (_container, url) = get_shared_db().await;
+    let (_redis, config) = start_redis_container().await;
+    let app_state = web::Data::new(AppState::new(config.url.clone(), url.clone()).await);
+    let app = protected_app!(app_state);
+
+    let sid = unique_sid();
+    let first = generate_session_jwt("1", "", Some(&sid)).unwrap();
+    // A refresh: Core signs a new token and publishes its hash. Two tokens signed in the same second
+    // can be identical, so the second one carries another role.
+    let second = generate_session_jwt("1", "Admin", Some(&sid)).unwrap();
+    assert_ne!(first, second);
+    publish_session_state(
+        app_state.get_redis(),
+        &sid,
+        &SessionState::active_with_token(1, &second, Some("92.184.10.1")),
+        60,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status_of!(app, second, "/protected"), StatusCode::OK);
+    assert_eq!(
+        status_of!(app, first, "/protected"),
+        StatusCode::UNAUTHORIZED
+    );
+
+    // The key holds the hash, never the token, and expires with it.
+    let mut conn = get_redis_connection(&config);
+    let raw: String = conn.get(session_state_key(&sid)).unwrap();
+    assert!(!raw.contains(&second));
+    let ttl: i64 = conn.ttl(session_state_key(&sid)).unwrap();
+    assert!((1..=60).contains(&ttl), "ttl = {ttl}");
+}
+
+#[tokio::test]
+#[serial]
+async fn mair_772_a_revoked_state_refuses_the_session_and_writes_the_revocation_list() {
+    setup();
+    let (_container, url) = get_shared_db().await;
+    let (_redis, config) = start_redis_container().await;
+    let app_state = web::Data::new(AppState::new(config.url.clone(), url.clone()).await);
+    let app = protected_app!(app_state);
+
+    let sid = unique_sid();
+    let token = generate_session_jwt("1", "", Some(&sid)).unwrap();
+    publish_session_state(
+        app_state.get_redis(),
+        &sid,
+        &SessionState::active_with_token(1, &token, None),
+        60,
+    )
+    .await
+    .unwrap();
+    assert_eq!(status_of!(app, token, "/protected"), StatusCode::OK);
+
+    mark_session_revoked(app_state.get_redis(), &sid, 1, 60)
+        .await
+        .unwrap();
+    assert_eq!(
+        status_of!(app, token, "/protected"),
+        StatusCode::UNAUTHORIZED
+    );
+    assert!(is_session_revoked(app_state.get_redis(), &sid)
+        .await
+        .unwrap());
+    let state = read_session_state(app_state.get_redis(), &sid)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.state, SessionStatus::Revoked);
+}
+
+#[tokio::test]
+#[serial]
+async fn mair_772_a_state_of_another_account_is_refused() {
+    setup();
+    let (_container, url) = get_shared_db().await;
+    let (_redis, config) = start_redis_container().await;
+    let app_state = web::Data::new(AppState::new(config.url.clone(), url.clone()).await);
+    let app = protected_app!(app_state);
+
+    let sid = unique_sid();
+    let token = generate_session_jwt("1", "", Some(&sid)).unwrap();
+    publish_session_state(
+        app_state.get_redis(),
+        &sid,
+        &SessionState::active_with_token(2, &token, None),
+        60,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        status_of!(app, token, "/protected"),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn mair_772_a_session_unknown_to_redis_and_the_database_keeps_the_account_check() {
+    setup();
+    let (_container, url) = get_shared_db().await;
+    let (_redis, config) = start_redis_container().await;
+    let app_state = web::Data::new(AppState::new(config.url.clone(), url.clone()).await);
+    let app = protected_app!(app_state);
+
+    let sid = unique_sid();
+    let token = generate_session_jwt("1", "", Some(&sid)).unwrap();
+    assert_eq!(status_of!(app, token, "/protected"), StatusCode::OK);
+    // Nothing is cached for a session the database does not know.
+    assert!(read_session_state(app_state.get_redis(), &sid)
+        .await
+        .unwrap()
+        .is_none());
+}
+
+// `actix_web::test` shadows the built-in `#[test]` attribute in this file.
+#[core::prelude::v1::test]
+fn mair_773_a_bound_session_token_carries_its_device_key_and_network() {
+    setup();
+    let binding = SessionBinding {
+        device_key_thumbprint: Some("NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs".to_string()),
+        network: Some("92.184.10.0/24".to_string()),
+    };
+    let token = generate_bound_session_jwt("1", "", Some("abc-123"), &binding).unwrap();
+    let claims = decode_jwt(&token).unwrap();
+    assert_eq!(
+        claims.device_key_thumbprint(),
+        Some("NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs")
+    );
+    assert_eq!(claims.network(), Some("92.184.10.0/24"));
+
+    let unbound = decode_jwt(&generate_session_jwt("1", "", None).unwrap()).unwrap();
+    assert_eq!(unbound.device_key_thumbprint(), None);
+    assert_eq!(unbound.network(), None);
 }

@@ -268,6 +268,26 @@ impl Redis {
         self.raw_exists(&self.shared_key(shared_key)).await
     }
 
+    /// `SET key value EX seconds NX` on a key **not** prefixed with the role. Returns whether the
+    /// key was written.
+    pub(crate) async fn set_ex_nx_shared<V>(
+        &self,
+        shared_key: &str,
+        value: V,
+        seconds: u64,
+    ) -> Result<bool, RedisError>
+    where
+        V: ToSingleRedisArg + Send + Sync,
+    {
+        self.raw_set_ex(&self.shared_key(shared_key), value, seconds, true)
+            .await
+    }
+
+    /// `GET key` on a key **not** prefixed with the role (`None` when absent).
+    pub(crate) async fn get_shared(&self, shared_key: &str) -> Result<Option<String>, RedisError> {
+        self.raw_get(&self.shared_key(shared_key)).await
+    }
+
     // --- Public API: every key is prefixed with the role ---
 
     /// # Errors

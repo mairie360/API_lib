@@ -37,6 +37,29 @@ pub fn generate_session_jwt(
     role: &str,
     session_id: Option<&str>,
 ) -> Result<String, Error> {
+    generate_bound_session_jwt(user_id_str, role, session_id, &SessionBinding::default())
+}
+
+/// What a session token carries about the device and the network it was opened from (MAIR-773).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionBinding {
+    /// RFC 7638 thumbprint of the device key (`DPoP`), written as `cnf.jkt`.
+    pub device_key_thumbprint: Option<String>,
+    /// Network prefix of the sign-in address, written as `net`.
+    pub network: Option<String>,
+}
+
+/// Same as [`generate_session_jwt`], with the device key and the sign-in network of the session.
+///
+/// # Errors
+///
+/// See [`generate_session_jwt`].
+pub fn generate_bound_session_jwt(
+    user_id_str: &str,
+    role: &str,
+    session_id: Option<&str>,
+    binding: &SessionBinding,
+) -> Result<String, Error> {
     let timeout = get_jwt_timeout()?;
 
     // A clock before the epoch gives 0: the token is then already expired (fails safe).
@@ -49,6 +72,12 @@ pub fn generate_session_jwt(
     let mut claims = Claims::new(user_id_str, role, expiration);
     if let Some(session_id) = session_id {
         claims = claims.with_session_id(session_id);
+    }
+    if let Some(jkt) = binding.device_key_thumbprint.as_deref() {
+        claims = claims.with_device_key(jkt);
+    }
+    if let Some(network) = binding.network.as_deref() {
+        claims = claims.with_network(network);
     }
 
     if let Some(signing_key) =

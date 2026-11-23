@@ -15,3 +15,6 @@ pub use is_user_active_by_id::IsUserActiveByIdQueryView;
 
 mod is_admin;
 pub use is_admin::IsAdminQueryView;
+
+mod session_state;
+pub use session_state::{SessionStateQueryResultView, SessionStateQueryView};

@@ -71,10 +71,10 @@ pub fn chart_acl_lines() -> Vec<String> {
         "default off resetkeys resetchannels -@all".to_string(),
         format!("admin on >{ACL_TEST_PASSWORD} ~* &* allcommands"),
         format!(
-            "core-api on >{ACL_TEST_PASSWORD} ~core-api:* ~revoked:* resetchannels -@all {commands}"
+            "core-api on >{ACL_TEST_PASSWORD} ~core-api:* ~revoked:* ~session:* resetchannels -@all {commands}"
         ),
         format!(
-            "project-api on >{ACL_TEST_PASSWORD} ~project-api:* %R~revoked:* resetchannels -@all {commands}"
+            "project-api on >{ACL_TEST_PASSWORD} ~project-api:* %R~revoked:* ~session:* resetchannels -@all {commands}"
         ),
     ]
 }

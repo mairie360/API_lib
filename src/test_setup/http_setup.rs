@@ -93,16 +93,22 @@ impl SeededUser {
 
 /// Sets the test key pair and `JWT_TIMEOUT` unless they are already set, once per process.
 ///
-/// `JWT_PUBLIC_KEY` / `JWT_PRIVATE_KEY` get the pair of [`test_jwt_private_key`]. Called by every
-/// helper of this module that builds a state or a token.
+/// `JWT_PUBLIC_KEY` / `JWT_PRIVATE_KEY` get the pair of [`test_jwt_private_key`]. The private key
+/// is also set when the public key was preset to [`TEST_JWT_PUBLIC_KEY`] alone, so that
+/// [`bearer_token`] can still sign; a harness presetting another public key keeps its own keys.
+/// Called by every helper of this module that builds a state or a token.
 pub fn init_test_jwt_env() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
-        if std::env::var_os("JWT_PUBLIC_KEY").is_none() {
+        let public_key = std::env::var("JWT_PUBLIC_KEY").ok();
+        if public_key.is_none() {
             std::env::set_var("JWT_PUBLIC_KEY", TEST_JWT_PUBLIC_KEY);
-            if std::env::var_os("JWT_PRIVATE_KEY").is_none() {
-                std::env::set_var("JWT_PRIVATE_KEY", test_jwt_private_key());
-            }
+        }
+        let test_public_key = public_key
+            .as_deref()
+            .is_none_or(|key| key == TEST_JWT_PUBLIC_KEY);
+        if test_public_key && std::env::var_os("JWT_PRIVATE_KEY").is_none() {
+            std::env::set_var("JWT_PRIVATE_KEY", test_jwt_private_key());
         }
         if std::env::var_os("JWT_TIMEOUT").is_none() {
             std::env::set_var("JWT_TIMEOUT", TEST_JWT_TIMEOUT);

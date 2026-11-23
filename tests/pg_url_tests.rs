@@ -55,8 +55,9 @@ fn base64_password_with_slash_round_trips() {
 }
 
 /// `AppState::from_env` assembles the same URL from `DB_*` and connects with it. Only test of
-/// this binary that touches the process environment.
+/// this binary that touches the process environment; `#[serial]` keeps it so if another one does.
 #[tokio::test]
+#[serial_test::serial]
 async fn app_state_from_env_connects_with_the_db_variables() {
     use mairie360_api_lib::state::AppState;
     use mairie360_api_lib::test_setup::queries_setup::get_shared_db;

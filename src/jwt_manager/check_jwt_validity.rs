@@ -8,11 +8,8 @@ use crate::jwt_manager::validate_jwt_config::{is_session_required, REQUIRE_SESSI
 use crate::smart_db::SmartDatabase;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Checks that a JWT signed with `JWT_SECRET` is present, valid, not expired and designates an
-/// existing, non-archived account.
-///
-/// Only concerns the historical tokens issued by `Core_API`: to accept the `EdDSA` session tokens as
-/// well, use [`super::authenticate_token`].
+/// Checks that a session JWT signed by `Core_API` is present, valid, not expired and designates
+/// an existing, non-archived account (see [`super::decode_jwt`]).
 ///
 /// # Errors
 ///
@@ -33,12 +30,12 @@ pub async fn check_jwt_validity(
         tracing::debug!("No JWT token provided.");
         return Err(JWTCheckError::NoTokenProvided);
     }
-    resolve_legacy_user(jwt, db_interface).await.map(|_| ())
+    resolve_session_user(jwt, db_interface).await.map(|_| ())
 }
 
 /// Same checks as [`check_jwt_validity`] on a non-empty token, returning the `users.id` the
 /// token designates.
-pub(super) async fn resolve_legacy_user(
+pub(super) async fn resolve_session_user(
     jwt: &str,
     db_interface: &SmartDatabase,
 ) -> Result<u64, JWTCheckError> {

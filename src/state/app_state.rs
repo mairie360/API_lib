@@ -52,7 +52,7 @@ impl AppState {
     ///
     /// # Panics
     ///
-    /// - when `JWT_SECRET` / `JWT_TIMEOUT` are missing or weak, see [`enforce_jwt_config`]
+    /// - when `JWT_PUBLIC_KEY` / `JWT_TIMEOUT` are missing or invalid, see [`enforce_jwt_config`]
     ///   (only logged in builds with the `test-utils` feature);
     /// - when Postgres cannot be reached within [`DB_CONNECT_TIMEOUT_ENV`] seconds (default
     ///   30): an API without its database must crash (and be restarted by Kubernetes), not start

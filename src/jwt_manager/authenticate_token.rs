@@ -1,15 +1,12 @@
-use super::check_jwt_validity::resolve_legacy_user;
+use super::check_jwt_validity::resolve_session_user;
 use super::error::JWTCheckError;
 use super::session_keys::session_public_keys;
 use crate::smart_db::SmartDatabase;
-use jsonwebtoken::{decode_header, Algorithm, AlgorithmFamily, Header};
+use jsonwebtoken::{decode_header, Algorithm, Header};
 
-/// Whether a token with this header was signed by `Core_API`: a historical HMAC token, or an
-/// `EdDSA` token whose `kid` is one of the keys of `JWT_PUBLIC_KEY` (MAIR-680).
+/// Whether a token with this header was signed by `Core_API`: an `EdDSA` token whose `kid` is
+/// one of the keys of `JWT_PUBLIC_KEY`.
 fn is_core_token(header: &Header) -> bool {
-    if header.alg.family() == AlgorithmFamily::Hmac {
-        return true;
-    }
     header.alg == Algorithm::EdDSA
         && header.kid.as_deref().is_some_and(|kid| {
             session_public_keys()
@@ -21,11 +18,11 @@ fn is_core_token(header: &Header) -> bool {
 
 /// Authenticates a bearer token and returns the `users.id` it designates.
 ///
-/// Only session JWTs issued by `Core_API` are accepted: a historical HMAC token, or an `EdDSA`
-/// token with the `kid` of a key of `JWT_PUBLIC_KEY`. They are checked like
+/// Only session JWTs issued by `Core_API` are accepted: an `EdDSA` token with the `kid` of a key
+/// of `JWT_PUBLIC_KEY`. They are checked like
 /// [`super::check_jwt_validity`] (signature, `iss`/`aud` for `EdDSA`, expiry, revocation,
 /// existing user; see [`super::decode_jwt`]). A token signed with any other algorithm or key
-/// (for example an RS256 token of an identity provider) is refused.
+/// (an HS256 token, an RS256 token of an identity provider) is refused.
 ///
 /// # Errors
 ///
@@ -55,5 +52,5 @@ pub async fn authenticate_token(
         tracing::warn!("Token not signed by Core_API refused.");
         return Err(JWTCheckError::InvalidToken);
     }
-    resolve_legacy_user(jwt, db_interface).await
+    resolve_session_user(jwt, db_interface).await
 }

@@ -1,6 +1,7 @@
 use mairie360_api_lib::jwt_manager::{
-    check_jwt_validity, generate_jwt, get_jwt_secret, get_jwt_timeout, get_user_id_from_jwt,
+    check_jwt_validity, generate_jwt, get_jwt_timeout, get_user_id_from_jwt,
 };
+use mairie360_api_lib::test_setup::http_setup::{test_jwt_private_key, TEST_JWT_PUBLIC_KEY};
 use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
 use serial_test::serial;
 use std::env;
@@ -8,7 +9,7 @@ use std::env;
 /**
  * This module contains tests for the JWT manager.
  * It tests the functionality of generating JWTs, retrieving user IDs from JWTs,
- * and getting the JWT secret and timeout.
+ * and getting the JWT timeout.
  */
 static USER_ID: &str = "1";
 
@@ -17,7 +18,8 @@ static USER_ID: &str = "1";
  */
 static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
     // This code runs ONCE before any test
-    env::set_var("JWT_SECRET", "b\"secret\"");
+    env::set_var("JWT_PUBLIC_KEY", TEST_JWT_PUBLIC_KEY);
+    env::set_var("JWT_PRIVATE_KEY", test_jwt_private_key());
     env::set_var("JWT_TIMEOUT", "3600");
     println!("Global setup done");
 });
@@ -34,7 +36,7 @@ fn setup() {
 /**
  * Tests for the JWT manager.
  * These tests cover the generation of JWTs, retrieval of user IDs from JWTs,
- * and the retrieval of JWT secrets and timeouts.
+ * and the retrieval of the JWT timeout.
  */
 #[cfg(test)]
 mod jwt_tests {
@@ -45,27 +47,6 @@ mod jwt_tests {
         redis::redis_interface::Redis,
         smart_db::SmartDatabase,
     };
-
-    /**
-     * Tests the retrieval of the JWT secret.
-     * It checks if the secret can be retrieved successfully and matches the expected value.
-     * It also ensures that the secret is in the expected byte format.
-     */
-    #[test]
-    fn test_get_jwt_secret() {
-        setup();
-        let secret = get_jwt_secret();
-        assert!(
-            secret.is_ok(),
-            "Failed to get JWT secret: {:?}",
-            secret.err()
-        );
-        assert_eq!(
-            secret.unwrap(),
-            b"b\"secret\"".to_vec(),
-            "JWT secret does not match expected value"
-        );
-    }
 
     /**
      * Tests the retrieval of the JWT timeout.

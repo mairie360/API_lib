@@ -223,8 +223,8 @@ pub fn session_public_keys() -> Result<Vec<SessionPublicKey>, SessionKeyError> {
         .map_or_else(|| Ok(Vec::new()), |pem| parse_public_keys(&pem))
 }
 
-/// The signing key of [`PRIVATE_KEY_ENV`], or `None` when the variable is unset or blank (the
-/// service does not sign, or Core still signs with `JWT_SECRET` during the transition).
+/// The signing key of [`PRIVATE_KEY_ENV`], or `None` when the variable is unset or blank (every
+/// service but `Core_API`).
 ///
 /// # Errors
 ///

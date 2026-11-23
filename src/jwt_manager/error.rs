@@ -21,6 +21,10 @@ pub enum JWTCheckError {
     /// The token's session was revoked (logout, revocation, archived account...).
     #[error("Revoked token")]
     RevokedToken,
+    /// A newer token of the same session was issued (refresh): this one is no longer the active token
+    /// of its session (MAIR-772).
+    #[error("Replaced token")]
+    ReplacedToken,
     /// The revocation list (Redis) could not be checked: the token is refused (fail closed).
     #[error("Token revocation check unavailable")]
     RevocationCheckUnavailable,
@@ -32,7 +36,8 @@ impl ResponseError for JWTCheckError {
             Self::NoTokenProvided
             | Self::ExpiredToken
             | Self::InvalidToken
-            | Self::RevokedToken => StatusCode::UNAUTHORIZED,
+            | Self::RevokedToken
+            | Self::ReplacedToken => StatusCode::UNAUTHORIZED,
             Self::UnknownUser => StatusCode::NOT_FOUND,
             Self::DatabaseError => StatusCode::INTERNAL_SERVER_ERROR,
             Self::RevocationCheckUnavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -46,8 +51,11 @@ impl ResponseError for JWTCheckError {
             // ExpiredToken: normal at the end of a session, no need to flood the error logs.
             // UnknownUser: valid token, but the user was deleted in the meantime.
             // RevokedToken: the user logged out or the session was revoked, expected.
-            Self::NoTokenProvided | Self::ExpiredToken | Self::UnknownUser | Self::RevokedToken => {
-            }
+            Self::NoTokenProvided
+            | Self::ExpiredToken
+            | Self::UnknownUser
+            | Self::RevokedToken
+            | Self::ReplacedToken => {}
             Self::InvalidToken => {
                 tracing::warn!("Access attempted with a forged or invalid JWT.");
             }

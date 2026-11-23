@@ -18,6 +18,20 @@ pub struct Claims {
     /// signs; optional so that [`Claims::new`] can build the claims before signing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     aud: Option<String>,
+    /// Confirmation (RFC 7800): `jkt`, the RFC 7638 thumbprint of the device key the session is bound
+    /// to (`DPoP`, RFC 9449, MAIR-773). Absent from unbound sessions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cnf: Option<Confirmation>,
+    /// Network the session was opened from (MAIR-773): the /24 (IPv4) or /64 (IPv6) prefix of the
+    /// sign-in address, compared by the fronts with the address of each request. Never the address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    net: Option<String>,
+}
+
+/// `cnf` claim of a session bound to a device key.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Confirmation {
+    pub jkt: String,
 }
 
 impl Claims {
@@ -30,6 +44,8 @@ impl Claims {
             sid: None,
             iss: None,
             aud: None,
+            cnf: None,
+            net: None,
         }
     }
 
@@ -46,6 +62,34 @@ impl Claims {
     pub fn with_session_id(mut self, session_id: &str) -> Self {
         self.sid = Some(session_id.to_string());
         self
+    }
+
+    /// Binds the session to the device key whose RFC 7638 thumbprint is `jkt` (`cnf.jkt`).
+    #[must_use]
+    pub fn with_device_key(mut self, jkt: &str) -> Self {
+        self.cnf = Some(Confirmation {
+            jkt: jkt.to_string(),
+        });
+        self
+    }
+
+    /// Records the network prefix the session was opened from (`net`).
+    #[must_use]
+    pub fn with_network(mut self, network: &str) -> Self {
+        self.net = Some(network.to_string());
+        self
+    }
+
+    /// Thumbprint of the device key the session is bound to, if any.
+    #[must_use]
+    pub fn device_key_thumbprint(&self) -> Option<&str> {
+        self.cnf.as_ref().map(|cnf| cnf.jkt.as_str())
+    }
+
+    /// Network prefix the session was opened from, if any.
+    #[must_use]
+    pub fn network(&self) -> Option<&str> {
+        self.net.as_deref()
     }
 
     #[must_use]

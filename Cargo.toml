@@ -25,8 +25,9 @@ futures-util = "0.3"
 governor = "0.10"
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 libc = { version = "0.2", optional = true }
-# OpenTelemetry (`otel` feature, MAIR-503). `tracing-actix-web` only supports OpenTelemetry up to
-# 0.32 and `tracing-opentelemetry` 0.33 is the release paired with it: bump all of them together.
+# OpenTelemetry (`otel` feature, MAIR-503). `tracing-actix-web` supports OpenTelemetry up to 0.33
+# (feature `opentelemetry_0_33`) and `tracing-opentelemetry` 0.34 is the release paired with it:
+# bump all of them together, including the `opentelemetry_0_xx` feature of `otel` below.
 opentelemetry = { version = "0.33", optional = true }
 opentelemetry-otlp = { version = "0.33", default-features = false, features = ["http-proto", "trace", "reqwest-blocking-client", "reqwest-rustls"], optional = true }
 opentelemetry_sdk = { version = "0.33", optional = true }
@@ -47,7 +48,7 @@ tokio-postgres = { version = "0.7", features = ["with-uuid-1"], optional = true 
 tracing = "0.1.44"
 # `request_log` (feature `tracing-actix`, MAIR-290) and `TracingLogger` (feature `otel`, MAIR-503).
 # No default feature: `emit_event_on_error` logs the `Debug` of every error.
-tracing-actix-web = { version = "0.7.25", default-features = false, optional = true }
+tracing-actix-web = { version = "0.7.26", default-features = false, optional = true }
 tracing-opentelemetry = { version = "0.34", optional = true }
 # Usage telemetry (feature `usage`, MAIR-501): the random salt of the user id hashes, per period.
 getrandom = { version = "0.4", optional = true }
@@ -71,7 +72,7 @@ default = []
 test-utils = ["dep:testcontainers", "dep:tokio-postgres", "dep:libc", "opentelemetry_sdk?/testing"]
 # Trace export (MAIR-503): `logging::telemetry`, OTLP/HTTP to the collector, one span per request
 # through `TracingLogger`. Every API enables it in `[dependencies]`.
-otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-actix-web", "tracing-actix-web/opentelemetry_0_32", "dep:tracing-opentelemetry"]
+otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-actix-web", "tracing-actix-web/opentelemetry_0_33", "dep:tracing-opentelemetry"]
 # `request_log::{hide_query, restore_query, RedactedRootSpanBuilder, describe_error}` for the APIs
 # that use tracing-actix-web (Core_API, Message_API). `request_logger` needs no feature.
 tracing-actix = ["dep:tracing-actix-web"]

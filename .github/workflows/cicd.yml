@@ -6,9 +6,9 @@ on:
 
 jobs:
   CICD:
-    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@v5.14.1
+    uses: mairie360/CICD/.github/workflows/back-lib-cicd.yml@v5.14.3
     with:
-      cicd_version: v5.14.1
+      cicd_version: v5.14.3
     # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit -- the called workflow is our own centralized CICD
     secrets:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

@@ -8,7 +8,7 @@
 
 use mairie360_api_lib::database::db_interface::Database;
 use mairie360_api_lib::database::query_views::{
-    GetUserIdByEmailQueryView, HasAccessQueryView, IsAdminQueryView, IsUserActiveByIdQueryView,
+    HasAccessQueryView, IsAdminQueryView, IsUserActiveByIdQueryView,
 };
 use mairie360_api_lib::test_setup::db_setup::API_ROLES;
 use mairie360_api_lib::test_setup::http_setup::{test_app_state_as, SeededUser};
@@ -62,7 +62,7 @@ async fn the_shared_db_stays_superuser_for_the_fixtures() {
 }
 
 /// The middlewares of this crate run these views for every API: the JWT check
-/// (`is_user_active_by_id`), the Keycloak account lookup (`get_user_id_by_email`), the admin
+/// (`is_user_active_by_id`), the admin
 /// guard (`is_admin`) and the access guard (`check_access`).
 #[tokio::test]
 #[serial]
@@ -77,16 +77,6 @@ async fn every_api_role_runs_the_middleware_queries() {
             .await
             .unwrap_or_else(|e| panic!("{role}: is_user_active_by_id failed: {e}"));
         assert!(active, "{role}: Alice is active");
-
-        let id: Option<i32> = db
-            .fetch_scalar(&GetUserIdByEmailQueryView::new("ALICE@example.com"))
-            .await
-            .unwrap_or_else(|e| panic!("{role}: get_user_id_by_email failed: {e}"));
-        assert_eq!(
-            id.map(i64::from),
-            Some(i64::try_from(alice).unwrap()),
-            "{role}: Keycloak e-mail lookup"
-        );
 
         let _: bool = db
             .fetch_scalar(&IsAdminQueryView::new(alice))

@@ -1,6 +1,6 @@
 [package]
 name = "mairie360_api_lib"
-version = "4.4.0"
+version = "6.0.0"
 authors = ["Quentin TENNEREL <quentin.tennerel@epitech.eu>"]
 edition = "2021"
 description = "Lib for mairie360 APIs"
@@ -25,20 +25,21 @@ futures-util = "0.3"
 governor = "0.10"
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 libc = { version = "0.2", optional = true }
-# OpenTelemetry (`otel` feature, MAIR-503). `tracing-actix-web` only supports OpenTelemetry up to
-# 0.32 and `tracing-opentelemetry` 0.33 is the release paired with it: bump all of them together.
-opentelemetry = { version = "0.32", optional = true }
-opentelemetry-otlp = { version = "0.32", default-features = false, features = ["http-proto", "trace", "reqwest-blocking-client", "reqwest-rustls"], optional = true }
-opentelemetry_sdk = { version = "0.32", optional = true }
+# OpenTelemetry (`otel` feature, MAIR-503). `tracing-actix-web` supports OpenTelemetry up to 0.33
+# (feature `opentelemetry_0_33`) and `tracing-opentelemetry` 0.34 is the release paired with it:
+# bump all of them together, including the `opentelemetry_0_xx` feature of `otel` below.
+opentelemetry = { version = "0.33", optional = true }
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["http-proto", "trace", "reqwest-blocking-client", "reqwest-rustls"], optional = true }
+opentelemetry_sdk = { version = "0.33", optional = true }
 percent-encoding = "2"
 redis = "1.0.3"
 regex = "1"
 reqwest = { version = "0.13.4", features = ["json"] }
-resend-rs = "0.34.0"
+resend-rs = "0.37.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-base64 = "0.22"
-sha2 = "0.10"
+base64 = "0.23"
+sha2 = "0.11"
 sqlx = { version = "0.9.0", features = ["postgres", "ipnetwork", "uuid", "runtime-tokio", "tls-rustls", "chrono"] }
 testcontainers = { version = "0.28.0", optional = true }
 thiserror = "2.0.18"
@@ -47,10 +48,10 @@ tokio-postgres = { version = "0.7", features = ["with-uuid-1"], optional = true 
 tracing = "0.1.44"
 # `request_log` (feature `tracing-actix`, MAIR-290) and `TracingLogger` (feature `otel`, MAIR-503).
 # No default feature: `emit_event_on_error` logs the `Debug` of every error.
-tracing-actix-web = { version = "0.7.25", default-features = false, optional = true }
-tracing-opentelemetry = { version = "0.33", optional = true }
+tracing-actix-web = { version = "0.7.26", default-features = false, optional = true }
+tracing-opentelemetry = { version = "0.34", optional = true }
 # Usage telemetry (feature `usage`, MAIR-501): the random salt of the user id hashes, per period.
-getrandom = { version = "0.3", optional = true }
+getrandom = { version = "0.4", optional = true }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
@@ -65,14 +66,13 @@ url = "2"
 
 [features]
 default = []
-# Test helpers for the APIs' own tests: `test_setup` (Postgres/Redis containers, seeded fixtures,
-# Keycloak mock) and `email::mock_client`. Enable it in `[dev-dependencies]` only, never in
+# Test helpers for the APIs' own tests: `test_setup` (Postgres/Redis containers, seeded fixtures) and `email::mock_client`. Enable it in `[dev-dependencies]` only, never in
 # `[dependencies]`: it pulls testcontainers into the binary.
 # With `otel`, it also turns on `opentelemetry_sdk/testing` (`InMemorySpanExporter`).
 test-utils = ["dep:testcontainers", "dep:tokio-postgres", "dep:libc", "opentelemetry_sdk?/testing"]
 # Trace export (MAIR-503): `logging::telemetry`, OTLP/HTTP to the collector, one span per request
 # through `TracingLogger`. Every API enables it in `[dependencies]`.
-otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-actix-web", "tracing-actix-web/opentelemetry_0_32", "dep:tracing-opentelemetry"]
+otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:tracing-actix-web", "tracing-actix-web/opentelemetry_0_33", "dep:tracing-opentelemetry"]
 # `request_log::{hide_query, restore_query, RedactedRootSpanBuilder, describe_error}` for the APIs
 # that use tracing-actix-web (Core_API, Message_API). `request_logger` needs no feature.
 tracing-actix = ["dep:tracing-actix-web"]

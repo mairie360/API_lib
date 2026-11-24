@@ -1,6 +1,7 @@
 use mairie360_api_lib::jwt_manager::{
-    check_jwt_validity, generate_jwt, get_jwt_secret, get_jwt_timeout, get_user_id_from_jwt,
+    check_jwt_validity, generate_jwt, get_jwt_timeout, get_user_id_from_jwt,
 };
+use mairie360_api_lib::test_setup::http_setup::{test_jwt_private_key, TEST_JWT_PUBLIC_KEY};
 use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
 use serial_test::serial;
 use std::env;
@@ -8,7 +9,7 @@ use std::env;
 /**
  * This module contains tests for the JWT manager.
  * It tests the functionality of generating JWTs, retrieving user IDs from JWTs,
- * and getting the JWT secret and timeout.
+ * and getting the JWT timeout.
  */
 static USER_ID: &str = "1";
 
@@ -17,7 +18,8 @@ static USER_ID: &str = "1";
  */
 static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
     // This code runs ONCE before any test
-    env::set_var("JWT_SECRET", "b\"secret\"");
+    env::set_var("JWT_PUBLIC_KEY", TEST_JWT_PUBLIC_KEY);
+    env::set_var("JWT_PRIVATE_KEY", test_jwt_private_key());
     env::set_var("JWT_TIMEOUT", "3600");
     println!("Global setup done");
 });
@@ -34,7 +36,7 @@ fn setup() {
 /**
  * Tests for the JWT manager.
  * These tests cover the generation of JWTs, retrieval of user IDs from JWTs,
- * and the retrieval of JWT secrets and timeouts.
+ * and the retrieval of the JWT timeout.
  */
 #[cfg(test)]
 mod jwt_tests {
@@ -45,27 +47,6 @@ mod jwt_tests {
         redis::redis_interface::Redis,
         smart_db::SmartDatabase,
     };
-
-    /**
-     * Tests the retrieval of the JWT secret.
-     * It checks if the secret can be retrieved successfully and matches the expected value.
-     * It also ensures that the secret is in the expected byte format.
-     */
-    #[test]
-    fn test_get_jwt_secret() {
-        setup();
-        let secret = get_jwt_secret();
-        assert!(
-            secret.is_ok(),
-            "Failed to get JWT secret: {:?}",
-            secret.err()
-        );
-        assert_eq!(
-            secret.unwrap(),
-            b"b\"secret\"".to_vec(),
-            "JWT secret does not match expected value"
-        );
-    }
 
     /**
      * Tests the retrieval of the JWT timeout.
@@ -234,8 +215,7 @@ mod jwt_tests {
 }
 
 /**
- * Tests for `authenticate_token`, which accepts both the historical `JWT_SECRET` tokens and
- * the Keycloak access tokens (verified against a fake realm, see `test_setup::keycloak_setup`).
+ * Tests for `authenticate_token`, which only accepts the session tokens signed by `Core_API`.
  */
 #[cfg(test)]
 mod authenticate_token_tests {
@@ -243,48 +223,10 @@ mod authenticate_token_tests {
     use mairie360_api_lib::{
         database::db_interface::Database,
         jwt_manager::{authenticate_token, error::JWTCheckError},
-        keycloak::{KeycloakConfig, KeycloakTokenVerifier},
         redis::redis_interface::Redis,
         smart_db::SmartDatabase,
-        test_setup::keycloak_setup::{access_token_claims, sign, KeycloakMock, TestKey, CLIENT_ID},
-        test_setup::queries_setup::{seed_password_hash, ALICE_ID, BOB_ID},
+        test_setup::queries_setup::{ALICE_ID, BOB_ID},
     };
-    use serde_json::json;
-
-    use mairie360_api_lib::database::db_interface::{ApiRequestDto, QueryParam};
-
-    /// Account registered with Alice's e-mail in upper case (`$1` = password hash).
-    #[derive(serde::Deserialize)]
-    struct InsertAliceCaseTwin {
-        params: Vec<QueryParam>,
-    }
-
-    impl ApiRequestDto for InsertAliceCaseTwin {
-        fn query_sql(&self) -> &'static str {
-            "INSERT INTO users (first_name, last_name, email, password, status) \
-             VALUES ('Mallory', 'Case', 'ALICE@example.com', $1, 'active')"
-        }
-
-        fn query_params(&self) -> &[QueryParam] {
-            &self.params
-        }
-    }
-
-    /// Drops the case-insensitive e-mail unique index added by Database v1.7.0 (MAIR-413), so a
-    /// test transaction can recreate the duplicates older schemas allowed. No-op on them.
-    #[derive(serde::Deserialize)]
-    struct DropCaseInsensitiveEmailIndex;
-
-    impl ApiRequestDto for DropCaseInsensitiveEmailIndex {
-        fn query_sql(&self) -> &'static str {
-            "DROP INDEX IF EXISTS uq_users_email_lower"
-        }
-
-        fn query_params(&self) -> &[QueryParam] {
-            &[]
-        }
-    }
-
     async fn smart_db() -> SmartDatabase {
         let (_container, host) = get_shared_db().await;
         let db_interface: Database = Database::new(host.as_str()).await;
@@ -302,7 +244,7 @@ mod authenticate_token_tests {
         let db = smart_db().await;
         let token = generate_jwt(&alice_id().to_string(), "test_role").unwrap();
 
-        let result = authenticate_token(&token, &db, None).await;
+        let result = authenticate_token(&token, &db).await;
 
         assert_eq!(result, Ok(alice_id()));
     }
@@ -314,7 +256,7 @@ mod authenticate_token_tests {
         let db = smart_db().await;
         let token = generate_jwt("8", "test_role").unwrap();
 
-        let result = authenticate_token(&token, &db, None).await;
+        let result = authenticate_token(&token, &db).await;
 
         assert_eq!(result, Err(JWTCheckError::UnknownUser));
     }
@@ -324,45 +266,14 @@ mod authenticate_token_tests {
     async fn test_empty_and_malformed_tokens_are_refused() {
         setup();
         let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
-
         assert_eq!(
-            authenticate_token("", &db, Some(&verifier)).await,
+            authenticate_token("", &db).await,
             Err(JWTCheckError::NoTokenProvided)
         );
         assert_eq!(
-            authenticate_token("not.a.token", &db, Some(&verifier)).await,
+            authenticate_token("not.a.token", &db).await,
             Err(JWTCheckError::InvalidToken)
         );
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_keycloak_token_resolves_the_account_by_email() {
-        setup();
-        let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
-        let token = mock.access_token("alice@example.com");
-
-        let result = authenticate_token(&token, &db, Some(&verifier)).await;
-
-        assert_eq!(result, Ok(alice_id()));
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_keycloak_email_match_ignores_case() {
-        setup();
-        let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
-        let token = mock.access_token("Alice@Example.COM");
-
-        let result = authenticate_token(&token, &db, Some(&verifier)).await;
-
-        assert_eq!(result, Ok(alice_id()));
     }
 
     #[tokio::test]
@@ -374,7 +285,7 @@ mod authenticate_token_tests {
         let token = generate_jwt(&bob_id.to_string(), "test_role").unwrap();
 
         assert_eq!(
-            authenticate_token(&token, &db, None).await,
+            authenticate_token(&token, &db).await,
             Err(JWTCheckError::UnknownUser)
         );
         assert_eq!(
@@ -392,149 +303,60 @@ mod authenticate_token_tests {
 
         // `#[serial]`: no other test of this binary reads the variable meanwhile.
         env::set_var("JWT_REQUIRE_SESSION", "true");
-        let required = authenticate_token(&token, &db, None).await;
+        let required = authenticate_token(&token, &db).await;
         env::set_var("JWT_REQUIRE_SESSION", "false");
-        let not_required = authenticate_token(&token, &db, None).await;
+        let not_required = authenticate_token(&token, &db).await;
         env::remove_var("JWT_REQUIRE_SESSION");
 
         assert_eq!(required, Err(JWTCheckError::InvalidToken));
         assert_eq!(not_required, Ok(alice_id()));
     }
 
+    /// Builds a token whose header claims `alg` and `kid`: the header is read before any
+    /// signature check, so a refused algorithm needs no key.
+    fn token_with_header(alg: &str, kid: &str) -> String {
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let header = b64.encode(format!(r#"{{"alg":"{alg}","typ":"JWT","kid":"{kid}"}}"#));
+        let claims = b64.encode(r#"{"sub":"1","exp":4102444800}"#);
+        format!("{header}.{claims}.c2lnbmF0dXJl")
+    }
+
+    /// An RS256 or ES256 token signed like a Keycloak access token is refused, whatever it claims.
     #[tokio::test]
     #[serial]
-    async fn test_keycloak_email_matching_several_accounts_up_to_case_is_refused() {
-        use mairie360_api_lib::database::{error::DbError, query_views::GetUserIdByEmailQueryView};
-        use mairie360_api_lib::error::ApiLibError;
+    async fn keycloak_style_tokens_are_refused() {
+        setup();
+        let db = smart_db().await;
+
+        for alg in ["RS256", "RS384", "RS512", "ES256", "ES384", "PS256"] {
+            let token = token_with_header(alg, "keycloak-realm-key");
+            assert_eq!(
+                authenticate_token(&token, &db).await,
+                Err(JWTCheckError::InvalidToken),
+                "{alg}"
+            );
+        }
+    }
+
+    /// A token with a Core `kid` but an asymmetric algorithm other than `EdDSA` is refused too.
+    #[tokio::test]
+    #[serial]
+    async fn core_kid_with_another_algorithm_is_refused() {
+        use mairie360_api_lib::jwt_manager::session_public_keys;
 
         setup();
         let db = smart_db().await;
-        let lookup = GetUserIdByEmailQueryView::new("alice@example.com");
-        // Recent schemas forbid such duplicates (`uq_users_email_lower`); the lib must still refuse
-        // them on older ones. Everything happens in a transaction rolled back at the end.
-        let mut tx = db.begin().await.unwrap();
-        tx.execute(&DropCaseInsensitiveEmailIndex).await.unwrap();
-        tx.execute(&InsertAliceCaseTwin {
-            params: vec![QueryParam::Text(seed_password_hash().to_string())],
-        })
-        .await
-        .unwrap();
+        let kid = session_public_keys()
+            .unwrap_or_default()
+            .first()
+            .map_or_else(|| "unknown".to_owned(), |key| key.kid().to_owned());
 
-        let ambiguous = tx.fetch_scalar::<i32, _>(&lookup).await;
+        let token = token_with_header("RS256", &kid);
 
-        tx.rollback().await.unwrap();
-        assert!(
-            matches!(ambiguous, Err(ApiLibError::Database(DbError::NotFound))),
-            "two accounts matching up to case must give no match, got {ambiguous:?}"
-        );
-        let single = db.fetch_scalar::<i32, _>(&lookup).await.unwrap();
         assert_eq!(
-            u64::try_from(single).unwrap(),
-            alice_id(),
-            "a single match is accepted"
+            authenticate_token(&token, &db).await,
+            Err(JWTCheckError::InvalidToken)
         );
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_keycloak_token_is_refused_when_keycloak_is_disabled() {
-        setup();
-        let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let token = mock.access_token("alice@example.com");
-
-        let result = authenticate_token(&token, &db, None).await;
-
-        assert_eq!(result, Err(JWTCheckError::InvalidToken));
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_check_jwt_validity_only_accepts_legacy_tokens() {
-        setup();
-        let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let token = mock.access_token("alice@example.com");
-
-        let result = check_jwt_validity(&token, &db).await;
-
-        assert_eq!(result, Err(JWTCheckError::InvalidToken));
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_keycloak_token_without_matching_account_is_unknown() {
-        setup();
-        let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
-        let token = mock.access_token("nobody@example.com");
-
-        let result = authenticate_token(&token, &db, Some(&verifier)).await;
-
-        assert_eq!(result, Err(JWTCheckError::UnknownUser));
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_keycloak_token_of_an_archived_account_is_unknown() {
-        setup();
-        let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
-        // Bob is archived by the shared fixtures.
-        let token = mock.access_token("bob@example.com");
-
-        let result = authenticate_token(&token, &db, Some(&verifier)).await;
-
-        assert_eq!(result, Err(JWTCheckError::UnknownUser));
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_expired_keycloak_token_is_expired() {
-        setup();
-        let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
-        let mut claims = access_token_claims(mock.realm_url(), "alice@example.com");
-        claims["exp"] = json!(jsonwebtoken::get_current_timestamp() - 300);
-        let token = sign(&claims, TestKey::A, TestKey::A.kid());
-
-        let result = authenticate_token(&token, &db, Some(&verifier)).await;
-
-        assert_eq!(result, Err(JWTCheckError::ExpiredToken));
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_keycloak_token_without_verified_email_is_forbidden() {
-        setup();
-        let db = smart_db().await;
-        let mock = KeycloakMock::start();
-        let verifier = mock.verifier();
-        let mut claims = access_token_claims(mock.realm_url(), "alice@example.com");
-        claims["email_verified"] = json!(false);
-        let token = sign(&claims, TestKey::A, TestKey::A.kid());
-
-        let result = authenticate_token(&token, &db, Some(&verifier)).await;
-
-        assert_eq!(result, Err(JWTCheckError::EmailNotVerified));
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_unreachable_realm_is_identity_provider_unavailable() {
-        setup();
-        let db = smart_db().await;
-        let realm = "http://127.0.0.1:9/realms/down";
-        let verifier =
-            KeycloakTokenVerifier::new(KeycloakConfig::new(realm, None, CLIENT_ID, None));
-        let claims = access_token_claims(realm, "alice@example.com");
-        let token = sign(&claims, TestKey::A, TestKey::A.kid());
-
-        let result = authenticate_token(&token, &db, Some(&verifier)).await;
-
-        assert_eq!(result, Err(JWTCheckError::IdentityProviderUnavailable));
     }
 }

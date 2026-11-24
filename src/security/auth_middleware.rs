@@ -68,15 +68,10 @@ where
                 actix_web::error::ErrorUnauthorized("Unauthorized: No JWT token provided.")
             })?;
 
-            // Historical `JWT_SECRET` token or Keycloak access token, picked from the `alg`
-            // header; the JWT error is turned into an actix_web::Error through ResponseError.
-            let user_id = Box::pin(authenticate_token(
-                &jwt,
-                db_interface,
-                app_state.get_keycloak(),
-            ))
-            .await
-            .map_err(actix_web::Error::from)?;
+            // Core session JWT; the JWT error is turned into an actix_web::Error through ResponseError.
+            let user_id = Box::pin(authenticate_token(&jwt, db_interface))
+                .await
+                .map_err(actix_web::Error::from)?;
 
             req.extensions_mut()
                 .insert(AuthenticatedUser { id: user_id });

@@ -105,19 +105,30 @@ fn mair_680_a_service_without_the_private_key_cannot_sign() {
 }
 
 #[test]
-fn mair_680_hs256_tokens_are_refused_once_jwt_secret_is_removed() {
-    let legacy = with_keys(None, None, Some(STRONG_SECRET), || {
-        generate_session_jwt("42", "Admin", Some("7")).unwrap()
-    });
-    assert_eq!(decode_header(&legacy).unwrap().alg, Algorithm::HS256);
+fn mair_680_hs256_tokens_are_refused_even_while_jwt_secret_is_set() {
+    // End of the transition: the old shared secret verifies nothing any more, even when a
+    // forgotten JWT_SECRET is still in the environment.
+    let legacy = encode(
+        &Header::new(Algorithm::HS256),
+        &Claims::new("42", "Admin", in_one_hour()).with_session_id("7"),
+        &EncodingKey::from_secret(STRONG_SECRET.as_bytes()),
+    )
+    .unwrap();
+    for secret in [Some(STRONG_SECRET), None] {
+        with_keys(Some(TEST_JWT_PUBLIC_KEY), None, secret, || {
+            assert!(decode_jwt(&legacy).is_err(), "accepted with {secret:?}");
+        });
+    }
+}
 
-    // Transition: both kinds are accepted while the secret is still set.
+#[test]
+fn mair_680_jwt_secret_no_longer_signs_without_the_private_key() {
+    // Without JWT_PRIVATE_KEY nothing is signed, not even an HS256 token with JWT_SECRET.
     with_keys(Some(TEST_JWT_PUBLIC_KEY), None, Some(STRONG_SECRET), || {
-        assert_eq!(decode_jwt(&legacy).unwrap().user_id(), "42");
+        assert!(generate_session_jwt("1", "Admin", None).is_err());
     });
-    // After the transition: the old secret is gone, its tokens are refused.
-    with_keys(Some(TEST_JWT_PUBLIC_KEY), None, None, || {
-        assert!(decode_jwt(&legacy).is_err());
+    with_keys(None, None, Some(STRONG_SECRET), || {
+        assert!(generate_session_jwt("1", "Admin", None).is_err());
     });
 }
 
@@ -286,20 +297,18 @@ fn mair_680_configuration_checks_the_keys() {
             assert_eq!(validate_jwt_config(), Ok(()));
         },
     );
-    // Transition: key and secret together.
-    with_keys(Some(OTHER_PUBLIC_KEY), None, Some(STRONG_SECRET), || {
-        assert_eq!(validate_jwt_config(), Ok(()));
-    });
-    // The committed test key is refused outside test stacks, as a weak key.
+    // The committed test key is refused outside test stacks (tolerated by JWT_ALLOW_WEAK_SECRET).
     with_keys(Some(TEST_JWT_PUBLIC_KEY), None, None, || {
         let error = validate_jwt_config().unwrap_err();
         assert_eq!(error, JwtConfigError::KnownTestKey);
-        assert!(error.is_weak_secret());
+        assert!(error.is_test_key());
     });
-    // Defects.
-    with_keys(None, None, None, || {
-        assert_eq!(validate_jwt_config(), Err(JwtConfigError::MissingSecret));
-    });
+    // Defects: no public key, even with the old secret.
+    for secret in [None, Some(STRONG_SECRET)] {
+        with_keys(None, None, secret, || {
+            assert_eq!(validate_jwt_config(), Err(JwtConfigError::MissingPublicKey));
+        });
+    }
     with_keys(Some("not a key"), None, None, || {
         assert_eq!(
             validate_jwt_config(),
@@ -340,10 +349,6 @@ fn mair_680_configuration_checks_the_keys() {
             validate_jwt_config(),
             Err(SessionKeyError::InvalidPrivateKey.into())
         );
-    });
-    // A weak secret is still refused during the transition.
-    with_keys(Some(OTHER_PUBLIC_KEY), None, Some("secret"), || {
-        assert_eq!(validate_jwt_config(), Err(JwtConfigError::KnownTestSecret));
     });
 }
 

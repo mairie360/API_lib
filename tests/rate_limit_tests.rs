@@ -178,3 +178,146 @@ fn config_falls_back_to_the_defaults() {
         },
     );
 }
+
+#[actix_web::test]
+async fn mair_688_a_forged_forwarded_chain_does_not_buy_a_new_budget() {
+    let app = app!(RateLimiter::new(config(1, true)));
+    let chain = |forged: &str, proxy_hop: &str| {
+        from_peer("10.0.0.5")
+            .insert_header(("X-Forwarded-For", format!("{forged}, {proxy_hop}")))
+            .insert_header(("Forwarded", format!("for={forged}")))
+            .to_request()
+    };
+    // The client writes the left of the chain, the trusted proxy appends the real address.
+    assert_eq!(
+        actix_test::call_service(&app, chain("6.6.6.1", "1.1.1.1"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        actix_test::call_service(&app, chain("6.6.6.2", "1.1.1.1"))
+            .await
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "another forged first hop is the same caller"
+    );
+    assert_eq!(
+        actix_test::call_service(&app, chain("6.6.6.1", "2.2.2.2"))
+            .await
+            .status(),
+        StatusCode::OK,
+        "a different address seen by the proxy has its own budget"
+    );
+}
+
+#[actix_web::test]
+async fn mair_688_an_unreadable_last_hop_falls_back_to_the_peer() {
+    let app = app!(RateLimiter::new(config(1, true)));
+    let junk = |peer: &str| {
+        from_peer(peer)
+            .insert_header(("X-Forwarded-For", "1.1.1.1, not-an-address"))
+            .to_request()
+    };
+    assert_eq!(
+        actix_test::call_service(&app, junk("10.0.0.7"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        actix_test::call_service(&app, junk("10.0.0.7"))
+            .await
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        actix_test::call_service(&app, junk("10.0.0.8"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+}
+
+#[actix_web::test]
+async fn mair_688_the_429_carries_both_wait_headers_and_a_plain_text_body() {
+    let app = app!(RateLimiter::new(config(1, false)));
+    for _ in 0..2 {
+        let _ = actix_test::call_service(&app, from_peer("10.0.0.1").to_request()).await;
+    }
+    let res = actix_test::call_service(&app, from_peer("10.0.0.1").to_request()).await;
+    assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+    let retry_after = res.headers().get(RETRY_AFTER).unwrap().clone();
+    assert_eq!(res.headers().get("X-RateLimit-After").unwrap(), retry_after);
+    let body = actix_test::read_body(res).await;
+    let body = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body.starts_with("Too many requests, retry in "), "{body}");
+}
+
+#[actix_web::test]
+async fn mair_688_a_zero_rate_disables_the_limiter() {
+    let limiter = temp_env::with_vars(
+        [
+            ("RATE_LIMIT_PER_SECOND", Some(" 0 ")),
+            ("RATE_LIMIT_BURST", Some("1")),
+        ],
+        RateLimiter::from_env,
+    );
+    let app = app!(limiter);
+    for _ in 0..20 {
+        let res = actix_test::call_service(&app, from_peer("10.0.0.1").to_request()).await;
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+}
+
+#[actix_web::test]
+async fn mair_688_an_unreadable_rate_keeps_the_limiter_on_with_the_default() {
+    let limiter = temp_env::with_vars(
+        [
+            ("RATE_LIMIT_PER_SECOND", Some("often")),
+            ("RATE_LIMIT_BURST", Some("1")),
+        ],
+        RateLimiter::from_env,
+    );
+    let app = app!(limiter);
+    assert_eq!(
+        actix_test::call_service(&app, from_peer("10.0.0.1").to_request())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        actix_test::call_service(&app, from_peer("10.0.0.1").to_request())
+            .await
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+#[actix_web::test]
+async fn mair_688_opaque_bytes_before_the_last_hop_do_not_hide_it() {
+    let app = app!(RateLimiter::new(config(1, true)));
+    let request = |prefix: &[u8], peer: &str| {
+        let mut value = prefix.to_vec();
+        value.extend_from_slice(b", 1.1.1.1");
+        from_peer(peer)
+            .insert_header((
+                "X-Forwarded-For",
+                actix_web::http::header::HeaderValue::from_bytes(&value).unwrap(),
+            ))
+            .to_request()
+    };
+    assert_eq!(
+        actix_test::call_service(&app, request(b"\x80", "10.0.0.1"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    // Another peer and another opaque prefix, same address seen by the proxy: same caller.
+    assert_eq!(
+        actix_test::call_service(&app, request(b"\xff\xfe", "10.0.0.2"))
+            .await
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}

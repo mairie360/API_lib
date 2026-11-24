@@ -3,7 +3,10 @@
 //!
 //! Own test binary: some tests change `REDIS_KEY_PREFIX` / `REDIS_USERNAME`.
 
-use mairie360_api_lib::jwt_manager::{is_session_revoked, revoke_session};
+use mairie360_api_lib::jwt_manager::{
+    cache_active_session, is_session_revoked, mark_session_revoked, publish_session_state,
+    read_session_state, revoke_session, SessionState, SessionStatus,
+};
 use mairie360_api_lib::redis::redis_interface::{resolve_key_prefix, Redis};
 use mairie360_api_lib::test_setup::redis_setup::{start_acl_redis_container, ACL_TEST_PASSWORD};
 use redis::Commands;
@@ -96,6 +99,45 @@ async fn revocation_keys_are_shared_and_unprefixed() {
     let other = uuid::Uuid::new_v4().to_string();
     assert!(revoke_session(&project, &other, 60).await.is_err());
     assert!(!is_session_revoked(&core, &other).await.unwrap());
+}
+
+#[tokio::test]
+#[serial]
+async fn mair_772_session_state_keys_are_shared_and_unprefixed() {
+    let (_node, config) = start_acl_redis_container().await;
+    let core = Redis::new(&config.url_as("core-api"));
+    let project = Redis::new(&config.url_as("project-api"));
+    let sid = uuid::Uuid::new_v4().to_string();
+
+    // Core publishes the active token, every API reads the same key.
+    publish_session_state(
+        &core,
+        &sid,
+        &SessionState::active_with_token(7, "a.b.c", None),
+        60,
+    )
+    .await
+    .unwrap();
+    let seen = read_session_state(&project, &sid).await.unwrap().unwrap();
+    assert!(seen.accepts("a.b.c"));
+    let mut admin = admin(&config);
+    let shared: bool = admin.exists(format!("session:{sid}")).unwrap();
+    assert!(shared);
+
+    // An API caches a session it checked in the database, never over an existing state.
+    let other = uuid::Uuid::new_v4().to_string();
+    assert!(cache_active_session(&project, &other, 7, None, 60)
+        .await
+        .unwrap());
+    assert!(!cache_active_session(&project, &sid, 7, None, 60)
+        .await
+        .unwrap());
+
+    // Core revokes: the state and the revocation list.
+    mark_session_revoked(&core, &sid, 7, 60).await.unwrap();
+    let revoked = read_session_state(&project, &sid).await.unwrap().unwrap();
+    assert_eq!(revoked.state, SessionStatus::Revoked);
+    assert!(is_session_revoked(&project, &sid).await.unwrap());
 }
 
 #[tokio::test]

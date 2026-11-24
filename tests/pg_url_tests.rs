@@ -55,15 +55,23 @@ fn base64_password_with_slash_round_trips() {
 }
 
 /// `AppState::from_env` assembles the same URL from `DB_*` and connects with it. Only test of
-/// this binary that touches the process environment.
+/// this binary that touches the process environment; `#[serial]` keeps it so if another one does.
 #[tokio::test]
+#[serial_test::serial]
 async fn app_state_from_env_connects_with_the_db_variables() {
     use mairie360_api_lib::state::AppState;
     use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
 
     let (_db, shared_url) = get_shared_db().await;
     let parsed = Url::parse(shared_url).unwrap();
-    std::env::set_var("JWT_SECRET", "test-only-pg-url-secret-0123456789abcdef");
+    std::env::set_var(
+        "JWT_PUBLIC_KEY",
+        mairie360_api_lib::test_setup::http_setup::TEST_JWT_PUBLIC_KEY,
+    );
+    std::env::set_var(
+        "JWT_PRIVATE_KEY",
+        mairie360_api_lib::test_setup::http_setup::test_jwt_private_key(),
+    );
     std::env::set_var("JWT_TIMEOUT", "3600");
     std::env::set_var("REDIS_URL", "redis://127.0.0.1:1");
     std::env::set_var("DB_USER", decode(parsed.username()));

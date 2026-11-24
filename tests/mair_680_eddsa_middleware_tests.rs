@@ -1,6 +1,6 @@
 //! MAIR-680: the middlewares accept the session tokens Core signs with its Ed25519 key and refuse
-//! forged ones, on a service that holds only the public key and no `JWT_SECRET` any more (the end
-//! of the transition). Own binary: the variables are set once for the whole process.
+//! forged ones, HS256 tokens included even while a stale `JWT_SECRET` is still set (the lib no
+//! longer reads it). Own binary: the variables are set once for the whole process.
 use actix_web::{http::StatusCode, test, web, App, HttpResponse};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use mairie360_api_lib::jwt_manager::{
@@ -31,10 +31,10 @@ MCowBQYDK2VwAyEAtZHz1BNkijjkLJlnK9l7vikDl0aivrmbwllpT68Lnss=
 ";
 
 static INIT: std::sync::LazyLock<()> = std::sync::LazyLock::new(|| {
-    // Core's key pair; no `JWT_SECRET`: the historical HS256 tokens are over.
+    // Core's key pair, plus the old shared secret left behind: it must verify nothing.
     std::env::set_var("JWT_PUBLIC_KEY", TEST_JWT_PUBLIC_KEY);
     std::env::set_var("JWT_PRIVATE_KEY", test_jwt_private_key());
-    std::env::remove_var("JWT_SECRET");
+    std::env::set_var("JWT_SECRET", OLD_SHARED_SECRET);
     std::env::set_var("JWT_TIMEOUT", "3600");
 });
 
@@ -72,12 +72,15 @@ fn forged_admin_token(user_id: u64) -> String {
     encode(&header, &claims, attacker.encoding_key()).unwrap()
 }
 
+/// The shared HS256 secret of the transition, still in the environment of these tests.
+const OLD_SHARED_SECRET: &str = "0123456789abcdef0123456789abcdef";
+
 /// An HS256 Admin token signed with the old shared secret.
 fn legacy_admin_token(user_id: u64) -> String {
     encode(
         &Header::new(Algorithm::HS256),
         &Claims::new(&user_id.to_string(), "Admin", in_one_hour()),
-        &EncodingKey::from_secret(b"0123456789abcdef0123456789abcdef"),
+        &EncodingKey::from_secret(OLD_SHARED_SECRET.as_bytes()),
     )
     .unwrap()
 }
@@ -88,10 +91,7 @@ async fn mair_680_a_core_eddsa_token_authenticates() {
     let alice = SeededUser::Alice.id().await;
     let db = smart_db().await;
     let token = generate_session_jwt(&alice.to_string(), "Admin", None).unwrap();
-    assert_eq!(
-        authenticate_token(&token, &db, None).await.ok(),
-        Some(alice)
-    );
+    assert_eq!(authenticate_token(&token, &db).await.ok(), Some(alice));
 }
 
 #[tokio::test]
@@ -103,10 +103,7 @@ async fn mair_680_forged_and_legacy_tokens_are_refused() {
         ("signed with another key", forged_admin_token(alice)),
         ("HS256 with the old secret", legacy_admin_token(alice)),
     ] {
-        assert!(
-            authenticate_token(&token, &db, None).await.is_err(),
-            "{case}"
-        );
+        assert!(authenticate_token(&token, &db).await.is_err(), "{case}");
     }
 }
 

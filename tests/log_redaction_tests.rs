@@ -11,7 +11,7 @@ use actix_web::ResponseError;
 use mairie360_api_lib::database::db_interface::{ApiRequestDto, Database, QueryParam};
 use mairie360_api_lib::database::error::DbError;
 use mairie360_api_lib::database::query_views::{
-    DoesUserExistByEmailQueryView, GetUserIdByEmailQueryView, IsSessionTokenValidQueryView,
+    DoesUserExistByEmailQueryView, IsSessionTokenValidQueryView,
 };
 use mairie360_api_lib::error::{describe_json_error, log_error, ApiLibError};
 use mairie360_api_lib::test_setup::queries_setup::get_shared_db;
@@ -222,10 +222,6 @@ fn json_errors_keep_the_type_and_drop_the_value() {
 
 #[test]
 fn query_views_never_show_their_values() {
-    let by_email = GetUserIdByEmailQueryView::new(EMAIL);
-    assert_eq!(by_email.to_string(), "GetUserIdByEmailQueryView");
-    assert_clean(&format!("{by_email:?}"), "Debug");
-
     let exists = DoesUserExistByEmailQueryView::new(EMAIL.to_string());
     assert_clean(&exists.to_string(), "Display");
     assert_clean(&format!("{exists:?}"), "Debug");

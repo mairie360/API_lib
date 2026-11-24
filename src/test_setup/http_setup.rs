@@ -28,17 +28,14 @@ use super::queries_setup::{
 use crate::jwt_manager::generate_jwt;
 use crate::state::AppState;
 
-/// `JWT_SECRET` set by [`init_test_jwt_env`] when the test binary did not set one.
-pub const TEST_JWT_SECRET: &str = "test-only-jwt-secret-for-endpoint-tests";
-
 /// PKCS#8 DER of the Ed25519 private key of the test key pair (MAIR-680). Stored as DER, like the
-/// Keycloak test keys, so that the secret scanners do not read a PEM private key in the sources.
+/// the secret scanners do not read a PEM private key in the sources.
 const TEST_JWT_PRIVATE_KEY_DER: &[u8] = include_bytes!("fixtures/session_test_key.der");
 
 /// Ed25519 private key of the test key pair (MAIR-680, `JWT_PRIVATE_KEY`), as PEM.
 ///
-/// For tests of tokens signed like Core signs them. Committed on purpose: `enforce_jwt_config`
-/// refuses its public key outside test stacks.
+/// Set as `JWT_PRIVATE_KEY` by [`init_test_jwt_env`]: the test tokens are signed like Core signs
+/// them. Committed on purpose: `enforce_jwt_config` refuses its public key outside test stacks.
 #[must_use]
 pub fn test_jwt_private_key() -> String {
     use base64::Engine;
@@ -94,13 +91,24 @@ impl SeededUser {
     }
 }
 
-/// Sets `JWT_SECRET` and `JWT_TIMEOUT` to test values unless they are already set, once per
-/// process. Called by every helper of this module that builds a state or a token.
+/// Sets the test key pair and `JWT_TIMEOUT` unless they are already set, once per process.
+///
+/// `JWT_PUBLIC_KEY` / `JWT_PRIVATE_KEY` get the pair of [`test_jwt_private_key`]. The private key
+/// is also set when the public key was preset to [`TEST_JWT_PUBLIC_KEY`] alone, so that
+/// [`bearer_token`] can still sign; a harness presetting another public key keeps its own keys.
+/// Called by every helper of this module that builds a state or a token.
 pub fn init_test_jwt_env() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
-        if std::env::var_os("JWT_SECRET").is_none() {
-            std::env::set_var("JWT_SECRET", TEST_JWT_SECRET);
+        let public_key = std::env::var("JWT_PUBLIC_KEY").ok();
+        if public_key.is_none() {
+            std::env::set_var("JWT_PUBLIC_KEY", TEST_JWT_PUBLIC_KEY);
+        }
+        let test_public_key = public_key
+            .as_deref()
+            .is_none_or(|key| key == TEST_JWT_PUBLIC_KEY);
+        if test_public_key && std::env::var_os("JWT_PRIVATE_KEY").is_none() {
+            std::env::set_var("JWT_PRIVATE_KEY", test_jwt_private_key());
         }
         if std::env::var_os("JWT_TIMEOUT").is_none() {
             std::env::set_var("JWT_TIMEOUT", TEST_JWT_TIMEOUT);
@@ -138,7 +146,8 @@ pub async fn test_app_state_as(role: &str) -> web::Data<AppState> {
     web::Data::new(AppState::new(String::new(), url).await)
 }
 
-/// A historical JWT (signed with `JWT_SECRET`) for `user_id`, without `sid`.
+/// A session JWT signed with the test key pair (`EdDSA`, like Core signs them) for `user_id`,
+/// without `sid`.
 ///
 /// # Panics
 ///
